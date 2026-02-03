@@ -40,17 +40,20 @@ def recursive_update(d, u):
 
 
 def build_simulated_inputs(model_dir):
-    # """
-    # Code for generating simulated_inputs.json file
-    # Adapted from original build_inputs.py for atc138 package.
+    """
+    Generates simulated_inputs dictionary from raw input files in the model directory.
+    Based on the original build_inputs.py script.
     
-    # Parameters
-    # ----------
-    # model_dir: string
-    #     directory containing input files.
-    # """
-
-    print(f"Building inputs from: {model_dir}")
+    Parameters
+    ----------
+    model_dir: string
+        Path to the directory containing raw input files.
+        
+    Returns
+    -------
+    simulated_inputs: dict
+        The complete dictionary of inputs.
+    """
         
     ''' PULL STATIC DATA
     If the location of this directory differs, updat the static_data_dir variable below. '''
