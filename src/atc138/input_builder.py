@@ -71,8 +71,24 @@ def build_simulated_inputs(model_dir):
     for s in range (building_model['num_stories']):
         building_model['comps']['story'][s] = {}
         for d in range(len(drs)):
-            filt = np.logical_and(np.array(comp_population['story']) == s+1, np.array(comp_population['dir']) == drs[d])
-            building_model['comps']['story'][s]['qty_dir_' + str(drs[d])] = comp_population.to_numpy()[filt,2:len(comp_header)].tolist()[0]
+            # [FIX] Robust key generation and missing data handling
+            current_dir = drs[d]
+            filt = np.logical_and(np.array(comp_population['story']) == s+1, np.array(comp_population['dir']) == current_dir)
+            
+            # Format key identifier using integer representation of direction to ensure consistency (e.g. qty_dir_1 not qty_dir_1.0)
+            try:
+                dir_key_suffix = str(int(current_dir))
+            except:
+                dir_key_suffix = str(current_dir)
+            
+            qty_data = comp_population.to_numpy()[filt,2:len(comp_header)]
+            
+            if qty_data.shape[0] > 0:
+                building_model['comps']['story'][s]['qty_dir_' + dir_key_suffix] = qty_data.tolist()[0]
+            else:
+                # Missing data for this story/direction, fill with zeros to avoid crashes
+                num_comps = len(comp_header) - 2
+                building_model['comps']['story'][s]['qty_dir_' + dir_key_suffix] = [0] * num_comps
     
     
     # Set comp info table
@@ -85,10 +101,12 @@ def build_simulated_inputs(model_dir):
         else:
             comp_attr = component_attributes.to_numpy()[comp_attr_filt,:]
         comp_info['comp_id'].append(comp_list[c])
-        comp_info['comp_idx'].append(c) #FZ# or c+1. Review in line with latter part of the code
-        comp_info['structural_system'].append(float(comp_attr[0,[component_attributes.columns.get_loc('structural_system')]]))
-        comp_info['structural_system_alt'].append(float(comp_attr[0,[component_attributes.columns.get_loc('structural_system_alt')]]))
-        comp_info['structural_series_id'].append(float(comp_attr[0,[component_attributes.columns.get_loc('structural_series_id')]]))
+        comp_info['comp_idx'].append(c) 
+        
+        # [FIX] Scalar extraction: Use scalar indexing [0, col] instead of slicing [0, [col]] to avoid array-to-scalar conversion errors
+        comp_info['structural_system'].append(float(comp_attr[0, component_attributes.columns.get_loc('structural_system')]))
+        comp_info['structural_system_alt'].append(float(comp_attr[0, component_attributes.columns.get_loc('structural_system_alt')]))
+        comp_info['structural_series_id'].append(float(comp_attr[0, component_attributes.columns.get_loc('structural_series_id')]))
     
     building_model['comps']['comp_table'] = comp_info
     
