@@ -27,6 +27,17 @@ def clean_types(obj):
         return float('nan') 
     return obj
 
+def recursive_update(d, u):
+    """
+    Recursively update dictionary d with values from u.
+    """
+    for k, v in u.items():
+        if isinstance(v, dict) and k in d and isinstance(d[k], dict):
+            recursive_update(d[k], v)
+        else:
+            d[k] = v
+    return d
+
 
 def build_simulated_inputs(model_dir):
     # """
@@ -176,10 +187,23 @@ def build_simulated_inputs(model_dir):
     optional_inputs.json file. This file is expected to be in this input
     directory. This file can be customized for each assessment if desired.'''
     
-    optional_inputs = json.load(open(os.path.join(model_dir, "optional_inputs.json")))
-    functionality_options = optional_inputs['functionality_options']
-    impedance_options = optional_inputs['impedance_options']
-    repair_time_options = optional_inputs['repair_time_options'] 
+    # Load defaults first, then merge user overrides
+    pkg_dir = os.path.dirname(__file__)
+    defaults_path = os.path.join(pkg_dir, 'data', 'default_inputs.json')
+    with open(defaults_path, 'r') as f:
+        options = json.load(f)
+
+    user_options_path = os.path.join(model_dir, 'optional_inputs.json')
+    if os.path.exists(user_options_path):
+        with open(user_options_path, 'r') as f:
+            user_options = json.load(f)
+        options = recursive_update(options, user_options)
+        
+    functionality_options = options['functionality_options']
+    impedance_options = options['impedance_options']
+    repair_time_options = options['repair_time_options']
+
+ 
     
     # Preallocate tenant unit table
     tenant_units = tenant_unit_list.copy() # copy to avoid SettingWithCopy if passed dataframe
