@@ -47,9 +47,20 @@ def run_analysis(input_dir, output_dir, seed=None):
     # Input/Output directories are passed as arguments
     
     ## 3. Load FEMA P-58 performance model data and simulated damage and loss
-    # Use provided input_dir
-    f = open(os.path.join(input_dir, 'simulated_inputs.json'))
-    simulated_inputs = json.load(f)
+    # Check if simulated_inputs.json exists, if not build it
+    sim_inputs_path = os.path.join(input_dir, 'simulated_inputs.json')
+    
+    if os.path.exists(sim_inputs_path):
+        f = open(sim_inputs_path)
+        simulated_inputs = json.load(f)
+    else:
+        print(f"simulated_inputs.json not found in {input_dir}. Building from raw inputs...")
+        from .input_builder import build_simulated_inputs
+        simulated_inputs = build_simulated_inputs(input_dir)
+        
+        # Save simulated inputs
+        with open(sim_inputs_path, 'w') as f:
+            json.dump(simulated_inputs, f)
     
     building_model = simulated_inputs['building_model']
     damage = simulated_inputs['damage']
@@ -61,22 +72,39 @@ def run_analysis(input_dir, output_dir, seed=None):
     tenant_units = simulated_inputs['tenant_units']
     
     # Change story indices in damage['tenant_units'], damage['story'] building_model['comps']['story'] to int from string
+    # (This ensures compatibility if JSON keys were strings)
     damage_ten_units = []
     if ('tenant_units' in damage.keys()) == True:
         for tu in range(len(damage['tenant_units'])):
-            damage_ten_units.append(damage['tenant_units'][str(tu)])
+            # Handle list vs dict if necessary, but assuming list structure from builder
+            if isinstance(damage['tenant_units'], list): # list
+                 damage_ten_units.append(damage['tenant_units'][tu])
+            elif str(tu) in damage['tenant_units']: # string key
+                 damage_ten_units.append(damage['tenant_units'][str(tu)])
+            elif tu in damage['tenant_units']: # integer key
+                 damage_ten_units.append(damage['tenant_units'][tu])
             
         damage['tenant_units'] = damage_ten_units  
     
     damage_story = []    
     for s in range(len(damage['story'])):
-        damage_story.append(damage['story'][str(s)])
+        if isinstance(damage['story'], list): # list
+            damage_story.append(damage['story'][s])
+        elif str(s) in damage['story']: # string key
+            damage_story.append(damage['story'][str(s)])
+        elif s in damage['story']: # integer key
+            damage_story.append(damage['story'][s])
     
     damage['story'] = damage_story 
     
     bldg_comps_story = []
     for s in range(len(building_model['comps']['story'])):
-        bldg_comps_story.append(building_model['comps']['story'][str(s)])
+        if isinstance(building_model['comps']['story'], list): # list
+             bldg_comps_story.append(building_model['comps']['story'][s])
+        elif str(s) in building_model['comps']['story']: # string key
+             bldg_comps_story.append(building_model['comps']['story'][str(s)])
+        elif s in building_model['comps']['story']: # integer key
+             bldg_comps_story.append(building_model['comps']['story'][s])
         
     building_model['comps']['story'] = bldg_comps_story
     

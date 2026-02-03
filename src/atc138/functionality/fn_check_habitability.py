@@ -24,7 +24,7 @@ def fn_check_habitability( damage, damage_consequences, reoc_meta, func_meta,
       recovery trajectorires, and contributions from systems and components''' 
     
     import numpy as np
-    from functionality import other_functionality_functions
+    from . import other_functionality_functions
     
     num_reals = len(damage_consequences['red_tag'])
     # Functionality checks to adopt onto reoccupancy requirements for

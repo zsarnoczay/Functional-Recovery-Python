@@ -34,10 +34,9 @@ def main_functionality(damage, building_model, damage_consequences,
      contains data on the recovery of tenant- and building-level function, 
      recovery trajectorires, and contributions from systems and components''' 
     
-    ## Import Packages
-    from functionality import fn_calculate_reoccupancy
-    from functionality import fn_calculate_functionality
-    from functionality import fn_check_habitability
+    from . import fn_calculate_reoccupancy
+    from . import fn_calculate_functionality
+    from . import fn_check_habitability
     ## Calaculate Building Functionality Restoration Curves
     # Downtime including external delays
     recovery = {}

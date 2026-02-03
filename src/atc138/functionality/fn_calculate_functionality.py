@@ -40,7 +40,7 @@ def fn_calculate_functionality(damage, damage_consequences, utilities,
     
     ## Initial Set Up
     # import packages
-    from functionality import other_functionality_functions
+    from . import other_functionality_functions
     
     ## Define the day each system becomes functionl - Building level
     system_operation_day = other_functionality_functions.fn_building_level_system_operation(damage, 

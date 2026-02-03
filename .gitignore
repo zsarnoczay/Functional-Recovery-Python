@@ -21,7 +21,13 @@
 *.ipynb_checkpoints
 
 # Output folder
-/outputs/
+outputs/
+
+# Folder with original Matlab code
+/Matlab_code/
+
+.ai/
+Comparison_scripts/
 
 # All new files coming out of buildInputs
 inputs/example_inputs/*/optional_inputs.json
