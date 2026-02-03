@@ -68,7 +68,8 @@ def build_simulated_inputs(model_dir):
     for each assessment. Data is formated as json structures or csv tables'''
     
     # 1. Building Model: Basic data about the building being assessed
-    building_model = json.loads(open(os.path.join(model_dir, 'building_model.json')).read())
+    with open(os.path.join(model_dir, 'building_model.json'), 'r') as f:
+        building_model = json.load(f)
     
     # If number of stories is 1, change individual values to lists in order to work with later code
     if building_model['num_stories'] == 1:
@@ -150,12 +151,15 @@ def build_simulated_inputs(model_dir):
     Data is formated as json structures.'''
     
     # 1. Simulated damage consequences - various building and story level consequences of simulated data, for each realization of the monte carlo simulation.
-    damage_consequences = json.loads(open(os.path.join(model_dir, 'damage_consequences.json')).read())
+    with open(os.path.join(model_dir, 'damage_consequences.json'), 'r') as f:
+        damage_consequences = json.load(f)
     
     # 2. Simulated utility downtimes for electrical, water, and gas networks for each realization of the monte carlo simulation.
     # If file exists load it 
-    if os.path.exists(os.path.join(model_dir, 'utility_downtime.json')) == True:
-        functionality = json.loads(open(os.path.join(model_dir, 'utility_downtime.json')).read())
+    utility_path = os.path.join(model_dir, 'utility_downtime.json')
+    if os.path.exists(utility_path):
+        with open(utility_path, 'r') as f:
+            functionality = json.load(f)
     # else If no data exist, assume there is no consequence of network downtime
     else:
         num_reals = len(damage_consequences["repair_cost_ratio_total"])
@@ -168,7 +172,9 @@ def build_simulated_inputs(model_dir):
     
     
     # 3. Simulated component damage per tenant unit for each realization of the monte carlo simulation
-    sim_damage = json.loads(open(os.path.join(model_dir, 'simulated_damage.json')).read())
+    # 3. Simulated component damage per tenant unit for each realization of the monte carlo simulation
+    with open(os.path.join(model_dir, 'simulated_damage.json'), 'r') as f:
+        sim_damage = json.load(f)
     
     # Write in individual dictionaries part of larger 'damage' dictionary 
     damage = {'story' : {}, 'tenant_units' : {}}
@@ -225,7 +231,7 @@ def build_simulated_inputs(model_dir):
         occ_id = tenant_units.loc[tu, 'occupancy_id'] # Use .loc for pandas safety
         fnc_requirements_filt = tenant_function_requirements['occupancy_id'] == occ_id
         if sum(fnc_requirements_filt) != 1:
-            sys.exit(f'error! Tenant Unit Requirements for Occupancy ID {occ_id} Not Found')
+            raise ValueError(f'error! Tenant Unit Requirements for Occupancy ID {occ_id} Not Found')
         
         # Accessing filtered rows. Original input builder used filtered Series assignment.
         req_row = tenant_function_requirements[fnc_requirements_filt].iloc[0]
@@ -305,7 +311,7 @@ def build_simulated_inputs(model_dir):
         # Find the component attributes of this component
         comp_attr_filt = component_attributes['fragility_id'] == comp_ds_list['comp_id'][c]
         if sum(comp_attr_filt) != 1:
-            sys.exit('error! Could not find component attrubutes')
+            raise ValueError('error! Could not find component attrubutes')
         else:
             comp_attr = component_attributes[comp_attr_filt].iloc[0] # Changed to Series access for robust scalar extraction
                   
@@ -335,7 +341,7 @@ def build_simulated_inputs(model_dir):
         ds_filt = ds_comp_filt & ds_seq_filt & ds_sub_filt
         
         if sum(ds_filt) != 1:
-            sys.exit('error!, Could not find damage state attrubutes')
+             raise ValueError('error!, Could not find damage state attrubutes')
         else:
             ds_attr = damage_state_attribute_mapping[ds_filt].iloc[0] # Series access
         
@@ -421,11 +427,18 @@ def build_simulated_inputs(model_dir):
     ## Check missing data
     # Engineering Repair Cost Ratio - Assume is the sum of all component repair
     # costs that require redesign
-    if 'repair_cost_ratio_engineering' in damage_consequences.keys() == False:
+    ## Check missing data
+    # Engineering Repair Cost Ratio - Assume is the sum of all component repair
+    # costs that require redesign
+    if 'repair_cost_ratio_engineering' not in damage_consequences:
         eng_filt = np.array(damage['comp_ds_table']['redesign']).astype(bool)
-        damage_consequences['repair_cost_ratio_engineering'] = np.zeros(len(damage_consequences['repair_cost_ratio_total']))
-        for s in range(len(sim_damage['story'])):
-            damage_consequences['repair_cost_ratio_engineering'] = damage_consequences['repair_cost_ratio_engineering'] + np.sum(sim_damage['story'][s]['repair_cost'][:,eng_filt], axis = 1)
+        # Re-calc using numpy arrays
+        costs = np.zeros(len(damage_consequences['repair_cost_ratio_total']))
+        if 'story' in sim_damage:
+             for s in range(len(sim_damage['story'])):
+                 story_costs = np.array(sim_damage['story'][s]['repair_cost'])
+                 costs += np.sum(story_costs[:, eng_filt], axis=1)
+        damage_consequences['repair_cost_ratio_engineering'] = costs.tolist()
     
 
     # Convert tenant_units dataframe to dictionary
