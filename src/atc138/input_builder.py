@@ -74,10 +74,12 @@ def build_simulated_inputs(model_dir):
     # If number of stories is 1, change individual values to lists in order to work with later code
     if building_model['num_stories'] == 1:
         for key in ['area_per_story_sf', 'ht_per_story_ft', 'occupants_per_story', 'stairs_per_story', 'struct_bay_area_per_story']:
-            building_model[key] = [building_model[key]]
+            if not isinstance(building_model[key], list):
+                building_model[key] = [building_model[key]]
     if building_model['num_stories'] == 1:
         for key in ['edge_lengths']:
-            building_model[key] = [[building_model[key][0]], [building_model[key][1]]]
+            if not isinstance(building_model[key][0], list):
+                building_model[key] = [[building_model[key][0]], [building_model[key][1]]]
     
     # 2. List of tenant units within the building and their basic attributes
     tenant_unit_list = pd.read_csv(os.path.join(model_dir, 'tenant_unit_list.csv'))
