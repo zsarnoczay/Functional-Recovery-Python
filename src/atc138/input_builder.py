@@ -222,26 +222,32 @@ def build_simulated_inputs(model_dir):
     '''Pull default tenant unit attributes for each tenant unit listed in the
     tenant_unit_list'''
     for tu in range(len(tenant_unit_list)):
-        fnc_requirements_filt = tenant_function_requirements['occupancy_id'] == tenant_units['occupancy_id'][tu]
+        occ_id = tenant_units.loc[tu, 'occupancy_id'] # Use .loc for pandas safety
+        fnc_requirements_filt = tenant_function_requirements['occupancy_id'] == occ_id
         if sum(fnc_requirements_filt) != 1:
-            sys.exit('error! Tenant Unit Requirements for This Occupancy Not Found')
+            sys.exit(f'error! Tenant Unit Requirements for Occupancy ID {occ_id} Not Found')
         
-        tenant_units['exterior'][tu] = tenant_function_requirements['exterior'][fnc_requirements_filt]
-        tenant_units['interior'][tu] = tenant_function_requirements['interior'][fnc_requirements_filt]
-        tenant_units['occ_per_elev'][tu] = tenant_function_requirements['occ_per_elev'][fnc_requirements_filt]
-        if list(tenant_function_requirements['is_elevator_required'][fnc_requirements_filt] == 1)[0]  and list(tenant_function_requirements['max_walkable_story'][fnc_requirements_filt] < tenant_units['story'][tu])[0]:
-            tenant_units['is_elevator_required'][tu] = 1
+        # Accessing filtered rows. Original input builder used filtered Series assignment.
+        req_row = tenant_function_requirements[fnc_requirements_filt].iloc[0]
+        
+        tenant_units.loc[tu, 'exterior'] = req_row['exterior']
+        tenant_units.loc[tu, 'interior'] = req_row['interior']
+        tenant_units.loc[tu, 'occ_per_elev'] = req_row['occ_per_elev']
+        
+        story = tenant_units.loc[tu, 'story']
+        if req_row['is_elevator_required'] == 1 and req_row['max_walkable_story'] < story:
+            tenant_units.loc[tu, 'is_elevator_required'] = 1
         else:
-            tenant_units['is_elevator_required'][tu] = 0
+            tenant_units.loc[tu, 'is_elevator_required'] = 0
     
-        tenant_units['is_electrical_required'][tu] = tenant_function_requirements['is_electrical_required'][fnc_requirements_filt]
-        tenant_units['is_water_potable_required'][tu] = tenant_function_requirements['is_water_potable_required'][fnc_requirements_filt]
-        tenant_units['is_water_sanitary_required'][tu] = tenant_function_requirements['is_water_sanitary_required'][fnc_requirements_filt]
-        tenant_units['is_hvac_ventilation_required'][tu] = tenant_function_requirements['is_hvac_ventilation_required'][fnc_requirements_filt]
-        tenant_units['is_hvac_heating_required'][tu] = tenant_function_requirements['is_hvac_heating_required'][fnc_requirements_filt]
-        tenant_units['is_hvac_cooling_required'][tu] = tenant_function_requirements['is_hvac_cooling_required'][fnc_requirements_filt]
-        tenant_units['is_hvac_exhaust_required'][tu] = tenant_function_requirements['is_hvac_exhaust_required'][fnc_requirements_filt]
-        tenant_units['is_data_required'][tu] = tenant_function_requirements['is_data_required'][fnc_requirements_filt]    
+        tenant_units.loc[tu, 'is_electrical_required'] = req_row['is_electrical_required']
+        tenant_units.loc[tu, 'is_water_potable_required'] = req_row['is_water_potable_required']
+        tenant_units.loc[tu, 'is_water_sanitary_required'] = req_row['is_water_sanitary_required']
+        tenant_units.loc[tu, 'is_hvac_ventilation_required'] = req_row['is_hvac_ventilation_required']
+        tenant_units.loc[tu, 'is_hvac_heating_required'] = req_row['is_hvac_heating_required']
+        tenant_units.loc[tu, 'is_hvac_cooling_required'] = req_row['is_hvac_cooling_required']
+        tenant_units.loc[tu, 'is_hvac_exhaust_required'] = req_row['is_hvac_exhaust_required']
+        tenant_units.loc[tu, 'is_data_required'] = req_row['is_data_required']    
     '''Pull default component and damage state attributes for each component 
     in the comp_ds_list'''
     
@@ -301,23 +307,25 @@ def build_simulated_inputs(model_dir):
         if sum(comp_attr_filt) != 1:
             sys.exit('error! Could not find component attrubutes')
         else:
-            # comp_attr = component_attributes[comp_attr_filt,:);
-            comp_attr = component_attributes.to_numpy()[comp_attr_filt,:]   #FZ# Changed to numpy array to filter out
-            comp_attr = pd.DataFrame(comp_attr, columns = list(component_attributes.columns)) #FZ# Changed back to DataFrame
+            comp_attr = component_attributes[comp_attr_filt].iloc[0] # Changed to Series access for robust scalar extraction
                   
         ds_comp_filt = []
         for frag_reg in range(len(damage_state_attribute_mapping["fragility_id_regex"])):
-        
+            regex_str = damage_state_attribute_mapping["fragility_id_regex"][frag_reg]
+            cid = comp_ds_list["comp_id"][c]
+            match = re.search(regex_str, cid)
+            
+
             # Mapping components with attributes - Cjecks are based on mapping, comp_id, seq_id and sub_id
-        
+
             # Matching element ID using information contained in damage_state_attribute_mapping ["fragility_id_regex"]
-            if re.search(damage_state_attribute_mapping["fragility_id_regex"][frag_reg], comp_ds_list["comp_id"][c]) == None:
-                ds_comp_filt.append(0)
-            elif (re.search(damage_state_attribute_mapping["fragility_id_regex"][frag_reg], comp_ds_list["comp_id"][c])).string == comp_ds_list["comp_id"][c]:
-                ds_comp_filt.append(1)
+            if match and match.string == cid:
+                ds_comp_filt.append(True)
             else:
-                ds_comp_filt.append(0)    
+                ds_comp_filt.append(False)    
         
+        ds_comp_filt = np.array(ds_comp_filt) # Convert to array for boolean indexing
+
         ds_seq_filt = damage_state_attribute_mapping['ds_index'] == comp_ds_list['ds_seq_id'][c]
         if comp_ds_list['ds_sub_id'][c] == 1:
             ds_sub_filt = np.logical_or(damage_state_attribute_mapping['sub_ds_index'] ==1, damage_state_attribute_mapping['sub_ds_index'].isnull())
@@ -329,74 +337,73 @@ def build_simulated_inputs(model_dir):
         if sum(ds_filt) != 1:
             sys.exit('error!, Could not find damage state attrubutes')
         else:
-            ds_attr = damage_state_attribute_mapping.to_numpy()[ds_filt,:] #FZ# Changed to numpy array to filter out
-            ds_attr = pd.DataFrame(ds_attr, columns = list(damage_state_attribute_mapping.columns)) #FZ# Changed back to DataFrame
+            ds_attr = damage_state_attribute_mapping[ds_filt].iloc[0] # Series access
         
         ## Populate data for each damage state
         # Basic Component and DS identifiers
         comp_ds_info['comp_id'].append(comp_ds_list['comp_id'][c])
         comp_ds_info['comp_type_id'].append(comp_ds_list['comp_id'][c][0:5]) # first 5 characters indicate the type
         comp_ds_info['comp_idx'].append(c)
-        comp_ds_info['ds_seq_id'].append(ds_attr['ds_index'][0])
-        # comp_ds_info['ds_sub_id'][c] = str2double(strrep(ds_attr.sub_ds_index{1},'NA','1'))
-        comp_ds_info['ds_sub_id'].append(ds_attr['sub_ds_index'][0])
-        if np.isnan(comp_ds_info['ds_sub_id'][c]):
-            comp_ds_info['ds_sub_id'][c] = 1.0
+        comp_ds_info['ds_seq_id'].append(ds_attr['ds_index'])
+        
+        sub_id = ds_attr['sub_ds_index']
+        if pd.isna(sub_id): sub_id = 1.0
+        comp_ds_info['ds_sub_id'].append(sub_id)
             
         # Set Component Attributes
-        comp_ds_info['system'].append(comp_attr['system_id'][0])
-        comp_ds_info['subsystem_id'].append(comp_attr['subsystem_id'][0])
-        comp_ds_info['structural_system'].append(comp_attr['structural_system'][0])
-        comp_ds_info['structural_system_alt'].append(comp_attr['structural_system_alt'][0]) # component_attributes.csv does not have structural_system_alt field 
-        comp_ds_info['structural_series_id'].append(comp_attr['structural_series_id'][0])
-        comp_ds_info['unit'].append(comp_attr['unit'][0]) #FZ# Check w.r.t. matlab output
-        comp_ds_info['unit_qty'].append(comp_attr['unit_qty'][0])
-        comp_ds_info['service_location'].append(comp_attr['service_location'][0]) #FZ# Check w.r.t. matlab output
+        comp_ds_info['system'].append(comp_attr['system_id'])
+        comp_ds_info['subsystem_id'].append(comp_attr['subsystem_id'])
+        comp_ds_info['structural_system'].append(comp_attr['structural_system'])
+        comp_ds_info['structural_system_alt'].append(comp_attr['structural_system_alt']) # component_attributes.csv does not have structural_system_alt field
+        comp_ds_info['structural_series_id'].append(comp_attr['structural_series_id'])
+        comp_ds_info['unit'].append(comp_attr['unit']) #FZ# Check w.r.t. matlab output
+        comp_ds_info['unit_qty'].append(comp_attr['unit_qty'])
+        comp_ds_info['service_location'].append(comp_attr['service_location']) #FZ# Check w.r.t. matlab output
                    
         # Set Damage State Attributes
-        comp_ds_info['is_sim_ds'].append(ds_attr['is_sim_ds'][0])
-        comp_ds_info['safety_class'].append(ds_attr['safety_class'][0])
-        comp_ds_info['affects_envelope_safety'].append(ds_attr['affects_envelope_safety'][0])
-        comp_ds_info['ext_falling_hazard'].append(ds_attr['exterior_falling_hazard'][0])
-        comp_ds_info['int_falling_hazard'].append(ds_attr['interior_falling_hazard'][0])
-        comp_ds_info['global_hazardous_material'].append(ds_attr['global_hazardous_material'][0])
-        comp_ds_info['local_hazardous_material'].append(ds_attr['local_hazardous_material'][0])
-        comp_ds_info['weakens_fire_break'].append(ds_attr['weakens_fire_break'][0])
-        comp_ds_info['affects_access'].append(ds_attr['affects_access'][0])
-        comp_ds_info['damages_envelope_seal'].append(ds_attr['damages_envelope_seal'][0])
-        comp_ds_info['affects_roof_function'].append(ds_attr['affects_roof_function'][0])
-        comp_ds_info['obstructs_interior_space'].append(ds_attr['obstructs_interior_space'][0])
-        comp_ds_info['impairs_system_operation'].append(ds_attr['impairs_system_operation'][0])
-        comp_ds_info['causes_flooding'].append(ds_attr['causes_flooding'][0])
-        comp_ds_info['interior_area_factor'].append(ds_attr['interior_area_factor'][0])
-        comp_ds_info['interior_area_conversion_type'].append(ds_attr['interior_area_conversion_type'][0])    
-        comp_ds_info['exterior_surface_area_factor'].append(ds_attr['exterior_surface_area_factor'][0])
-        comp_ds_info['exterior_falling_length_factor'].append(ds_attr['exterior_falling_length_factor'][0])                
-        comp_ds_info['crew_size'].append(ds_attr['crew_size'][0])
-        comp_ds_info['permit_type'].append(ds_attr['permit_type'][0])
-        comp_ds_info['redesign'].append(ds_attr['redesign'][0])
-        comp_ds_info['long_lead_time'].append(impedance_options['default_lead_time'] * ds_attr['long_lead'][0])
-        comp_ds_info['requires_shoring'].append(ds_attr['requires_shoring'][0])
-        comp_ds_info['resolved_by_scaffolding'].append(ds_attr['resolved_by_scaffolding'][0])
-        comp_ds_info['tmp_repair_class'].append(ds_attr['tmp_repair_class'][0])
-        comp_ds_info['tmp_repair_time_lower'].append(ds_attr['tmp_repair_time_lower'][0])
-        comp_ds_info['tmp_repair_time_upper'].append(ds_attr['tmp_repair_time_upper'][0])
+        # Map fields (legacy mapping logic preserved where simple)
+        comp_ds_info['is_sim_ds'].append(ds_attr['is_sim_ds'])
+        comp_ds_info['safety_class'].append(ds_attr['safety_class'])
+        comp_ds_info['affects_envelope_safety'].append(ds_attr['affects_envelope_safety'])
+        comp_ds_info['ext_falling_hazard'].append(ds_attr['exterior_falling_hazard'])
+        comp_ds_info['int_falling_hazard'].append(ds_attr['interior_falling_hazard'])
+        comp_ds_info['global_hazardous_material'].append(ds_attr['global_hazardous_material'])
+        comp_ds_info['local_hazardous_material'].append(ds_attr['local_hazardous_material'])
+        comp_ds_info['weakens_fire_break'].append(ds_attr['weakens_fire_break'])
+        comp_ds_info['affects_access'].append(ds_attr['affects_access'])
+        comp_ds_info['damages_envelope_seal'].append(ds_attr['damages_envelope_seal'])
+        comp_ds_info['affects_roof_function'].append(ds_attr['affects_roof_function'])
+        comp_ds_info['obstructs_interior_space'].append(ds_attr['obstructs_interior_space'])
+        comp_ds_info['impairs_system_operation'].append(ds_attr['impairs_system_operation'])
+        comp_ds_info['causes_flooding'].append(ds_attr['causes_flooding'])
+        comp_ds_info['interior_area_factor'].append(ds_attr['interior_area_factor'])
+        comp_ds_info['interior_area_conversion_type'].append(ds_attr['interior_area_conversion_type'])    
+        comp_ds_info['exterior_surface_area_factor'].append(ds_attr['exterior_surface_area_factor'])
+        comp_ds_info['exterior_falling_length_factor'].append(ds_attr['exterior_falling_length_factor'])                
+        comp_ds_info['crew_size'].append(ds_attr['crew_size'])
+        comp_ds_info['permit_type'].append(ds_attr['permit_type'])
+        comp_ds_info['redesign'].append(ds_attr['redesign'])
+        comp_ds_info['long_lead_time'].append(impedance_options['default_lead_time'] * ds_attr['long_lead'])
+        comp_ds_info['requires_shoring'].append(ds_attr['requires_shoring'])
+        comp_ds_info['resolved_by_scaffolding'].append(ds_attr['resolved_by_scaffolding'])
+        comp_ds_info['tmp_repair_class'].append(ds_attr['tmp_repair_class'])
+        comp_ds_info['tmp_repair_time_lower'].append(ds_attr['tmp_repair_time_lower'])
+        comp_ds_info['tmp_repair_time_upper'].append(ds_attr['tmp_repair_time_upper'])
         
-        if comp_ds_info['tmp_repair_class'][c] > 0: # only grab values for components with temp repair times
-            time_lower_quantity = ds_attr['time_lower_quantity'][0]
-            time_upper_quantity = ds_attr['time_upper_quantity'][0]
-        
-            comp_ds_info['tmp_repair_time_lower_qnty'].append(time_lower_quantity)
-            comp_ds_info['tmp_repair_time_upper_qnty'].append(time_upper_quantity)
+        tmp_class = ds_attr['tmp_repair_class']
+        if tmp_class > 0:
+            comp_ds_info['tmp_repair_time_lower_qnty'].append(ds_attr['time_lower_quantity'])
+            comp_ds_info['tmp_repair_time_upper_qnty'].append(ds_attr['time_upper_quantity'])
         else:
             comp_ds_info['tmp_repair_time_lower_qnty'].append(np.nan)
             comp_ds_info['tmp_repair_time_upper_qnty'].append(np.nan)
     
-        comp_ds_info['tmp_crew_size'].append(ds_attr['tmp_crew_size'][0])
+        comp_ds_info['tmp_crew_size'].append(ds_attr['tmp_crew_size'])
     
         # Subsystem attributes
-        subsystem_filt = subsystems['id'] == comp_attr['subsystem_id'][0]
-        if comp_ds_info['subsystem_id'][c] == 0:
+        sub_id = comp_attr['subsystem_id']
+        subsystem_filt = subsystems['id'] == sub_id
+        if sub_id == 0:
             # No subsytem
             comp_ds_info['n1_redundancy'].append(0)
             comp_ds_info['parallel_operation'].append(0)
@@ -404,10 +411,10 @@ def build_simulated_inputs(model_dir):
         elif sum(subsystem_filt) != 1:
             sys.exit('error! Could not find damage state attrubutes')
         else:
-            # Set Damage State Attributes
-            comp_ds_info['n1_redundancy'].append(np.array(subsystems['n1_redundancy'])[subsystem_filt][0])
-            comp_ds_info['parallel_operation'].append(np.array(subsystems['parallel_operation'])[subsystem_filt][0])
-            comp_ds_info['redundancy_threshold'].append(np.array(subsystems['redundancy_threshold'])[subsystem_filt][0])
+            sub_row = subsystems[subsystem_filt].iloc[0]
+            comp_ds_info['n1_redundancy'].append(sub_row['n1_redundancy'])
+            comp_ds_info['parallel_operation'].append(sub_row['parallel_operation'])
+            comp_ds_info['redundancy_threshold'].append(sub_row['redundancy_threshold'])
     
     damage['comp_ds_table'] = comp_ds_info
     
