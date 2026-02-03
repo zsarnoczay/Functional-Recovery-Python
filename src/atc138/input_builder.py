@@ -6,6 +6,28 @@ import os
 import re
 import sys
 
+def clean_types(obj):
+    """
+    Recursively convert numpy types to native Python types for JSON serialization,
+    preserving NaN as float('nan') for Numpy compatibility in the engine.
+    """
+    if isinstance(obj, dict):
+        return {k: clean_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_types(i) for i in obj]
+    elif isinstance(obj, np.ndarray):
+        return clean_types(obj.tolist())
+    elif isinstance(obj, (np.int64, np.int32, int)):
+        return int(obj)
+    elif isinstance(obj, (np.float64, np.float32, float)):
+         # Preserving NaN for numpy compatibility in downstream engine
+         return float(obj)
+    elif pd.isna(obj): 
+        # Handle standalone pandas/numpy NaNs/NaTs
+        return float('nan') 
+    return obj
+
+
 def build_simulated_inputs(model_dir):
     # """
     # Code for generating simulated_inputs.json file
@@ -375,30 +397,14 @@ def build_simulated_inputs(model_dir):
             damage_consequences['repair_cost_ratio_engineering'] = damage_consequences['repair_cost_ratio_engineering'] + np.sum(sim_damage['story'][s]['repair_cost'][:,eng_filt], axis = 1)
     
 
-    # Covert to Python int and floats for creating .json file
-    for key in list(damage['comp_ds_table'].keys()):
-        for i in range(len(damage['comp_ds_table'][key])):
-            if type(damage['comp_ds_table'][key][i]) == np.int64:
-                damage['comp_ds_table'][key][i] = int(damage['comp_ds_table'][key][i])
-            if type(damage['comp_ds_table'][key][i]) == np.float64:
-                damage['comp_ds_table'][key][i] = float(damage['comp_ds_table'][key][i])            
-    
-    for key in list(tenant_units.keys()):
-        for i in range(len(tenant_units[key])):
-            if type(tenant_units[key][i]) == np.int64:
-                tenant_units[key][i] = int(tenant_units[key][i])
-            if type(tenant_units[key][i]) == np.float64:
-                tenant_units[key][i] = float(tenant_units[key][i])  
-    
     # Convert tenant_units dataframe to dictionary
-    tenant_units_dict = {}
-    for i in list(tenant_units.columns):
-        tenant_units_dict[i] = list(tenant_units[i])
-        
-    tenant_units = tenant_units_dict
+    tenant_units_dict = tenant_units.to_dict(orient='list')
          
     # Export output as simulated_inputs.json file 
     
-    simulated_inputs = {'building_model' : building_model, 'damage' : damage, 'damage_consequences' : damage_consequences, 'functionality' : functionality, 'functionality_options' : functionality_options, 'impedance_options' : impedance_options, 'repair_time_options' : repair_time_options, 'tenant_units' : tenant_units}
+    simulated_inputs = {'building_model' : building_model, 'damage' : damage, 'damage_consequences' : damage_consequences, 'functionality' : functionality, 'functionality_options' : functionality_options, 'impedance_options' : impedance_options, 'repair_time_options' : repair_time_options, 'tenant_units' : tenant_units_dict}
+    
+    # [FIX] Type cleaning using recursive helper (enables JSON serialization while preserving NaNs)
+    simulated_inputs = clean_types(simulated_inputs)
     
     return simulated_inputs
