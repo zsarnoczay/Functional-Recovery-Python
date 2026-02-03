@@ -25,6 +25,9 @@ dependencies = [
   "seaborn",
 ]
 
+[project.scripts]
+atc138 = "atc138.cli:main"
+
 [project.urls]
 "Homepage" = "https://github.com/NHERI-SimCenter/Functional-Recovery-Python"
 "Bug Tracker" = "https://github.com/NHERI-SimCenter/Functional-Recovery-Python/issues"
