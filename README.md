@@ -2,43 +2,39 @@
 This is translation of Matlab codebase into Python for quantifying building-specific functional recovery and reoccupancy based on a probabilistic performance-based earthquake engineering framework.
 
 ## Requirements
-- The `requirements.txt` file defines the Python package dependencies required to run this codebase. Follow the instructions below to install all required depenedancies listed in the 'requirements.txt' file.
-- Recommended Python version: `3.9` (the codebase was developed and tested with Python 3.9).
 
-Installation (using a virtual environment is recommended):
+- **Python Version**: 3.9 or later (recommend 3.9)
+- **Package Manager**: pip (comes with Python)
 
-```powershell
-# create a virtual environment
-python -m venv .venv
+### Installation
 
-# activate the virtual environment (PowerShell)
-.\.venv\Scripts\Activate.ps1
+The ATC-138 Functional Recovery Assessment tool is distributed as a Python package. Install it using pip:
 
-# upgrade pip (optional but recommended)
-python -m pip install --upgrade pip
-
-# install dependencies from requirements.txt
-pip install -r requirements.txt
-```
-
-If you prefer conda:
 
 ```bash
-conda create -n frec python=3.9
-conda activate frec
-pip install -r requirements.txt
+# Create and activate a virtual environment (recommended)
+python -m venv .venv
+
+# Activate virtual environment
+# On Windows (PowerShell):
+.\.venv\Scripts\Activate.ps1
+# On macOS/Linux:
+source .venv/bin/activate
+
+# Install the package in editable mode
+pip install -e .
 ```
 
-If you run into platform-specific dependency issues, please refer to the package error messages and install any missing system libraries before re-running `pip install -r requirements.txt`.
-Original Matlab code is from Dr. Dustin Cook's Github directory https://github.com/OpenPBEE/PBEE-Recovery.
 
-### Method Description
-The method for quantifying building-specific functional recovery is based on the performance-based earthquake engineering framework. To quantify building function, the method maps component-level damage to system-level performance, and system-level performance to building function using a series of fault trees that describe the interdependencies between the functions of various building components. The method defines the recovery of function and occupancy at the tenant unit level, where a building can be made up of one-to-many tenant units, each with a possible unique set of requirements to regain building function; the recovery state of the building is defined as an aggregation of all the tenant units within the building. The method propagates uncertainty through the assessment using a Monte Carlo simulation. Details of the method are fully described in Cook, Liel, Haselton, and Koliou, 2022. "A Framework for Operationalizing the Assessment of Post Earthquake Functional Recovery of Buildings", Earthquake Spectra.
+### Verify Installation
 
-### Implementation Details
-The method is developed as part of the consequence module of the Performance-Based Earthquake Engineering framework and uses simulations of component damage from the FEMA P-58 method as an fundamental input. Therefore, this implementation will not perform a FEMA P-58 assessment, and instead, expects the simulations of component damage, from a FEMA P-58 assessment to be provided as inputs. Along with other information about the building, the buildings tenant units, and some analysis options, this implementation will perform the functional recovery assessment method, and provide simulated recovery times for each realization provided. The implementation runs an assessment for a single building at a single intensity level. The implementation of the method does not handle demo and replace conditions and predicts building function based on component damage simulation and recovery times assuming damage will be repaired in-kind. Building failure, demo, and replacement conditions can be handled as a post-process by either overwriting realizations where global failure occurs or only inputting realizations that are scheduled for repair.
+After installation, verify that the CLI is available:
 
-The method is employs Python v 3.9; running this implementation using other versions of Python may not perform as expected.
+```bash
+atc138 --help
+```
+
+You should see the command help output with available options.
 
 ## Running an Assessment
  - **Step 1**: Build the inputs json file of simulated inputs. Title the file "simulated_inputs.json" and place it in a directory of the model name within the "inputs" drirectory. This json data file can either be constructed manually following the inputs schema or using the build script as discussed in the _Building the Inputs File section_ below.
