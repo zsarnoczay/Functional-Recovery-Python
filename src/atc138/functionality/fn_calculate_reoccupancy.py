@@ -37,7 +37,7 @@ def fn_calculate_reoccupancy(damage, damage_consequences, utilities,
     import numpy as np
     # Import packages
     
-    from functionality import other_functionality_functions    
+    from . import other_functionality_functions
         
     ## Stage 1: Quantify the effect that component damage has on the building safety
     recovery_day={}

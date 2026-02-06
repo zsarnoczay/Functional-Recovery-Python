@@ -435,8 +435,8 @@ def fn_set_repair_constraints(systems, repair_type, conditionTag):
     # Interior Constraints
     if repair_type == 'full':
         # Interiors are delayed by structural repairs
-        interiors_idx = np.where(np.array(systems['name']) == 'interior')[0] #FZ# [0] is done to convert tuple to np array
-        structure_idx = np.where(np.array(systems['name']) == 'structural')[0]
+        interiors_idx = np.where(np.array(systems['name']) == 'interior')[0][0] #FZ [0] is done to convert tuple to np array # [0][0] to get scalar
+        structure_idx = np.where(np.array(systems['name']) == 'structural')[0][0]
  
         sys_constraint_matrix[:,interiors_idx] = structure_idx+1 #FZ# +1 is done to replace with the system id which starts with 1, but python indexing starts at 0. 
         

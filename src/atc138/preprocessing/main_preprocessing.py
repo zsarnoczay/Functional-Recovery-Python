@@ -39,8 +39,8 @@ def main_preprocessing(comp_ds_table, damage, repair_time_options, temp_repair_c
     damage_consequences: dictionary
       dictionary containing simulated building consequences, such as red'''
     
-    # Import Packages
-    from preprocessing import preprocessing_fns
+    import numpy as np
+    from . import preprocessing_fns
     
     ## Define simulated damage in each tenant unit if not provided by the user
     damage = preprocessing_fns.fn_populate_damage_per_tu(damage)

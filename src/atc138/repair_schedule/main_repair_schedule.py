@@ -56,7 +56,7 @@ def main_repair_schedule(damage, building_model, simulated_red_tags,
     import math
     import numpy as np
     
-    from repair_schedule import other_repair_schedule_functions
+    from . import other_repair_schedule_functions
     
     ## initial Setup
     # Define the maximum number of workers that can be on site, based on REDI

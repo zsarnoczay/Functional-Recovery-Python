@@ -1,4 +1,4 @@
-def run_analysis(model_name, seed=None):
+def run_analysis(input_dir, output_dir, seed=None):
 
     '''This script facilitates the performance based functional recovery and
     reoccupancy assessment of a single building for a single intensity level
@@ -15,9 +15,11 @@ def run_analysis(model_name, seed=None):
     
     Parameters
     ----------
-    model_name: string
-        Name of the model. Inputs are expected to be in a directory with this 
-        name. Outputs will save to a directory with this name
+    input_dir: string
+        Path to the directory containing the input files (simulated_inputs.json).
+    
+    output_dir: string
+        Path to the directory where the output file (recovery_outputs.json) will be saved.
     
     seed: int
         Random seed to be passed to the Numpy random engine. Default behavior
@@ -42,12 +44,23 @@ def run_analysis(model_name, seed=None):
     from scipy.stats import truncnorm
     
     ## 2. Define User Inputs
-    model_dir = 'inputs/example_inputs/'+model_name # Directory where the simulated inputs are located
-    outputs_dir = 'outputs/'+model_name # Directory where the assessment outputs are saved
+    # Input/Output directories are passed as arguments
     
     ## 3. Load FEMA P-58 performance model data and simulated damage and loss
-    f = open(os.path.join(os.path.dirname(__file__),model_dir, 'simulated_inputs.json'))
-    simulated_inputs = json.load(f)
+    # Check if simulated_inputs.json exists, if not build it
+    sim_inputs_path = os.path.join(input_dir, 'simulated_inputs.json')
+    
+    if os.path.exists(sim_inputs_path):
+        f = open(sim_inputs_path)
+        simulated_inputs = json.load(f)
+    else:
+        print(f"simulated_inputs.json not found in {input_dir}. Building from raw inputs...")
+        from .input_builder import build_simulated_inputs
+        simulated_inputs = build_simulated_inputs(input_dir)
+        
+        # Save simulated inputs
+        with open(sim_inputs_path, 'w') as f:
+            json.dump(simulated_inputs, f)
     
     building_model = simulated_inputs['building_model']
     damage = simulated_inputs['damage']
@@ -59,33 +72,52 @@ def run_analysis(model_name, seed=None):
     tenant_units = simulated_inputs['tenant_units']
     
     # Change story indices in damage['tenant_units'], damage['story'] building_model['comps']['story'] to int from string
+    # (This ensures compatibility if JSON keys were strings)
     damage_ten_units = []
     if ('tenant_units' in damage.keys()) == True:
         for tu in range(len(damage['tenant_units'])):
-            damage_ten_units.append(damage['tenant_units'][str(tu)])
+            # Handle list vs dict if necessary, but assuming list structure from builder
+            if isinstance(damage['tenant_units'], list): # list
+                 damage_ten_units.append(damage['tenant_units'][tu])
+            elif str(tu) in damage['tenant_units']: # string key
+                 damage_ten_units.append(damage['tenant_units'][str(tu)])
+            elif tu in damage['tenant_units']: # integer key
+                 damage_ten_units.append(damage['tenant_units'][tu])
             
         damage['tenant_units'] = damage_ten_units  
     
     damage_story = []    
     for s in range(len(damage['story'])):
-        damage_story.append(damage['story'][str(s)])
+        if isinstance(damage['story'], list): # list
+            damage_story.append(damage['story'][s])
+        elif str(s) in damage['story']: # string key
+            damage_story.append(damage['story'][str(s)])
+        elif s in damage['story']: # integer key
+            damage_story.append(damage['story'][s])
     
     damage['story'] = damage_story 
     
     bldg_comps_story = []
     for s in range(len(building_model['comps']['story'])):
-        bldg_comps_story.append(building_model['comps']['story'][str(s)])
+        if isinstance(building_model['comps']['story'], list): # list
+             bldg_comps_story.append(building_model['comps']['story'][s])
+        elif str(s) in building_model['comps']['story']: # string key
+             bldg_comps_story.append(building_model['comps']['story'][str(s)])
+        elif s in building_model['comps']['story']: # integer key
+             bldg_comps_story.append(building_model['comps']['story'][s])
         
     building_model['comps']['story'] = bldg_comps_story
     
     ## 4. Load required static data
-    systems = pd.read_csv(os.path.join(os.path.dirname(__file__), 'static_tables', 'systems.csv'))
-    subsystems = pd.read_csv(os.path.join(os.path.dirname(__file__), 'static_tables', 'subsystems.csv'))
-    impeding_factor_medians = pd.read_csv(os.path.join(os.path.dirname(__file__), 'static_tables', 'impeding_factors.csv'))
-    tmp_repair_class = pd.read_csv(os.path.join(os.path.dirname(__file__), 'static_tables', 'temp_repair_class.csv'))
+    # Static data is bundled with the package, so use __file__
+    pkg_dir = os.path.dirname(__file__)
+    systems = pd.read_csv(os.path.join(pkg_dir, 'data', 'systems.csv'))
+    subsystems = pd.read_csv(os.path.join(pkg_dir, 'data', 'subsystems.csv'))
+    impeding_factor_medians = pd.read_csv(os.path.join(pkg_dir, 'data', 'impeding_factors.csv'))
+    tmp_repair_class = pd.read_csv(os.path.join(pkg_dir, 'data', 'temp_repair_class.csv'))
     
     ## 5. Run Recovery Method
-    from main_PBEE_recovery import main_PBEE_recovery
+    from .engine import main_PBEE_recovery
 
     # set a seed
     # this seed propagates through the entire subfunctions
@@ -107,11 +139,9 @@ def run_analysis(model_name, seed=None):
                                                             functionality_options)
            
     # 6. Save Outputs
-    # # Define Output path
-    if os.path.exists(os.path.join(os.path.dirname(__file__),'outputs')) == False:
-        os.mkdir(os.path.join(os.path.dirname(__file__),'outputs'))
-    if os.path.exists(os.path.join(os.path.dirname(__file__),'outputs', model_name)) == False:
-        os.mkdir(os.path.join(os.path.dirname(__file__),'outputs', model_name))
+    # Ensure output directory exists
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     
     # Covert arrays to list for writing to json file   
     fnc_keys_1 = list(functionality.keys())
@@ -147,18 +177,12 @@ def run_analysis(model_name, seed=None):
     
     output_json_object = json.dumps(functionality)
     
-    with open(os.path.join(os.path.dirname(__file__),outputs_dir, "recovery_outputs.json"), "w") as outfile:
+    with open(os.path.join(output_dir, "recovery_outputs.json"), "w") as outfile:
         outfile.write(output_json_object)
     
     end_time = time.time()
     
-    print('Recovery assessment of model ' + model_name + ' complete')
+    # print('Recovery assessment of model ' + model_name + ' complete') # model_name no longer available
+    print('Recovery assessment complete')
     print('time to run '+str(round(end_time - start_time,2))+'s')
-        
-    
-if __name__ == '__main__':
-
-    model_name = 'ICSB'
-
-    run_analysis(model_name)
 

@@ -55,7 +55,8 @@ def main_impeding_factors(damage, impedance_options, repair_cost_ratio_total,
     
     import numpy as np
     from scipy.stats import truncnorm
-    from impedance import other_impedance_functions
+    
+    from . import other_impedance_functions
 
     # Initialize parameters
     num_reals = len(inspection_trigger)

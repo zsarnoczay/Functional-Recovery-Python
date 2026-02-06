@@ -797,7 +797,7 @@ def fn_building_level_system_operation( damage, damage_consequences,
     
  
     # import packages
-    from functionality import other_functionality_functions
+    from . import other_functionality_functions
     import numpy as np
     
     system_operation_day = {'building' : {}, 'comp' : {}}
@@ -960,7 +960,7 @@ def fn_tenant_function( damage, building_model, system_operation_day,
                            initial_damaged, dependancy):
 
         # import packages
-        from functionality import other_functionality_functions
+        from . import other_functionality_functions
         
         # Set variables
         recovery_day_all = dependancy['recovery_day'].copy()

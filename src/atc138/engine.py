@@ -57,11 +57,11 @@ def main_PBEE_recovery(damage, damage_consequences, building_model,
     
     ## Import Packages
     import numpy as np
-    from preprocessing import main_preprocessing
-    from fn_red_tag import fn_red_tag
-    from impedance import main_impedance_function
-    from repair_schedule import main_repair_schedule
-    from functionality import main_functionality_function
+    from .preprocessing import main_preprocessing
+    from .red_tag import fn_red_tag
+    from .impedance import main_impedance_function
+    from .repair_schedule import main_repair_schedule
+    from .functionality import main_functionality_function
     
     ## Combine compoment attributes into recovery filters to expidite recovery assessment
     damage, tmp_repair_class, damage_consequences = main_preprocessing.main_preprocessing(damage['comp_ds_table'], 
