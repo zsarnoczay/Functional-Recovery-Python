@@ -37,13 +37,38 @@ atc138 --help
 You should see the command help output with available options.
 
 ## Running an Assessment
- - **Step 1**: Build the inputs json file of simulated inputs. Title the file "simulated_inputs.json" and place it in a directory of the model name within the "inputs" drirectory. This json data file can either be constructed manually following the inputs schema or using the build script as discussed in the _Building the Inputs File section_ below.
- - **Step 2**: Open the Python file "driver_PBEErecovery.py" and set the "model_name", "model_dir", and "outputs_dir" variables.
- - **Step 3**: Run the script
- - **Step 4**: Simulated assessment outputs will be saved as a json file in a directory of your choice
+
+An assessment can be run directly from the command line, or as imported within a Python workflow. If `simulated_inputs.json` does not exist, it will be created using default inputs within `src/atc138/data`. Various assessment options can be overridden by placing them in file `optional_inputs.json` file within the input directory. This file can be customized for each assessment if desired and will be set as default values if not specified.
+
+### Running from the command line
+
+With the input directory containing the necessary inputs, perform an assessment by running:
+
+```bash
+python -m atc138.cli dir/to/inputs dir/to/outputs
+```
+
+ For example, the ICSB example case is run with:
+
+```bash
+python -m atc138.cli ./examples/ICSB ./examples/ICSB/output
+```
+
+### Imported via Python script
+
+Ensure that the `src/` directory is on the path of the main script. Then:
+
+```python
+from src.atc138 import driver
+
+example_dir = './examples/ICSB'
+output_dir = './examples/ICSB/output'
+
+driver.run_analysis(example_dir, output_dir, seed=985)
+```
 
 ## Example Inputs
-Four example inputs are provided to help illustrate both the construction of the inputs file and the implementation. These files are located in the inputs/example_inputs directory and can be run through the assessment by setting the variable names accordingly in **step 2** above.
+Four example inputs are provided to help illustrate both the construction of the inputs file and the implementation. These files are located in the `examples/` directory and can be run through the assessment by setting the variable names accordingly above.
 
 ## Definition of I/O
 A brief description of the various input and output variables are provided below. A detailed schema of all expected input and output subfields is provided in the schema directory.
@@ -76,18 +101,8 @@ A brief description of the various input and output variables are provided below
  - **functionality['impeding_factors']**: Python dictionary
    Python dictionary containing the simulated impeding factors delaying the start of system repair
 
-## Building the Inputs File
-Instead of manually defining the inputs matlab data file based on the inputs schema, the inputs file can be built from a simpler set of building inputs, taking advantage of default assessment assumptions and component, system, and tenant attributes contained within the _static_tables_ directory.
-
-### Instructions
- - **Step 1**: Copy the scripts build_inputs.py and optional_inputs.py from the _Inputs2Copy_ directory to the directory where you want to build the simulated_inputs.json inputs file
- - **Step 2**: Add the requried building specific input files listed below to the same directory
- - **Step 3**: Modify the optional_inputs.py file as needed and run it before running the build_inputs.py file
- - **Step 4**: Make sure the diectory for the static data tables in build_inputs.py is correctly pointing to the location of the _static_tables_ directory under the heading # Load required data tables
- - **Step 5**: Run the build script
-
-#### Option for Customizing Static Data 
-If you would like to modify the static data tables listed below for a specifc model, simply copy the static data tables listed below to the build script directory, modify the files, and specifiy the path to the location of the modified files (same directory as the build script).
+## Manually building the Inputs File
+By default, the inputs file are built from a simpler set of building inputs, taking advantage of default assessment assumptions and component, system, and tenant attributes contained within the _data_ directory. If you would like to manually modify the data tables listed below for a specific model, simply copy the files to the input directory and modify them.
 
 ### Required Building Specific Data
 Each file listed below contains data specific to the building performance model and simulated damage given for a specific level of shaking. Each file listed will need to be created for each unique assessment and saved in the root directory of the build script. Data are contained in either json  or csv format.
@@ -97,7 +112,7 @@ Each file listed below contains data specific to the building performance model 
      - story: [int] building story where this tenant unit is located (ground floor is listed at 1)
      - area: [number] total gross plan area of the tenant unit, in square feet
      - perim_area: [number] total exterior perimeter area (elevation) of the tenant unit, is square feet
-     - occupancy_id: [int] foreign key to the _occupancy_id_ attribute of the tenant_function_requirements.csv table in the _static_tables_ directory
+     - occupancy_id: [int] foreign key to the _occupancy_id_ attribute of the tenant_function_requirements.csv table in the _data_ directory
  - **comp_ds_list.csv**: Table that lists each component and damage state populated in the building performance model; one row per each component's damage state. This table requires the following attributes:
      - comp_id: [string] unique FEMA P-58 component identifier
      - ds_seq_id: [int] interger index of the sequential parent damage state (i.e., damage state 1, 2, 3, 4);
@@ -113,15 +128,17 @@ Each file listed below contains data specific to the building performance model 
      - tenant_unit{tu}.num_comps: [array: 1 × damage states] The total number of components associated with each damage state (should be uniform for damage state of the same component stack).
 
 ### Optional Building Specific Data
-The file(s) listed below contain data that is optional for the assessment. If the files do not exist, the method will make simplifying assumptions to account for the missing data (as noted below). Save in the root directory of the build script.
+The file(s) listed below contain data that is optional for the assessment. If the files do not exist, the method will make simplifying assumptions to account for the missing data (as noted below). Save in the input directory of your analysis.
  - **utility_downtime.json**: Regional utility simulated downtimes for gas, water, and electrical power networks. Contains all variables within the _functionality['utilities']_ dictionary defined in the inputs schema.
 
 ### Default Optional Inputs
-The Python file listed below defines additional assessment inputs based on set of default values. Copy the file from the _Inputs2Copy_ directory, place it in the root directory of the build script, and modify it as you see if (or build the script programmatically)
- - **optional_inputs.py**: Defines default variables for the impedance_options, repair_time_options, functionality_options, and regional_impact variables listed in the inputs schema.
+The Python file listed below defines additional assessment inputs based on set of default values. Place this file in the input directory of your analysis.
+ - **optional_inputs.json**: Defines default variables for the impedance_options, repair_time_options, functionality_options, and regional_impact variables listed in the inputs schema.
+
+<!-- How does a user modify the static tables (now data) without touching the original data files? -->
 
 ### Static Data
-The csv tables listed below contain default component, damage state, system, and tenant function attributes that can be used to populate the required assessment inputs according to the methodology. Either in build_inputs.py point to the location of these tables in the _static_tables_ directory, or copy and modify them as you see fit and place them in the root directory of the build script.
+The csv tables listed below contain default component, damage state, system, and tenant function attributes that can be used to populate the required assessment inputs according to the methodology. Either in `input_builder.py` point to the location of these tables in the _data_ directory, or copy and modify them as you see fit and place them in the root directory of the build script.
  - **component_attributes.csv**: Attributes of components in the FEMA P-58 fragility database that are required for the functional recovery assessment.
  - **damage_state_attribute_mapping.csv**: Attributes of damage state in the FEMA P-58 fragility database and their affect on function and reoccupancy.
  - **subsystems.csv**: Attributes of each default subsystem considered in the method.
