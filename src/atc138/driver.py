@@ -42,6 +42,7 @@ def run_analysis(input_dir, output_dir, seed=None):
     import math
     import pandas as pd
     from scipy.stats import truncnorm
+    from .input_builder import load_custom_static_tables
     
     ## 2. Define User Inputs
     # Input/Output directories are passed as arguments
@@ -110,11 +111,20 @@ def run_analysis(input_dir, output_dir, seed=None):
     
     ## 4. Load required static data
     # Static data is bundled with the package, so use __file__
+    # First, check if custom versions exist within input directory
+
     pkg_dir = os.path.dirname(__file__)
-    systems = pd.read_csv(os.path.join(pkg_dir, 'data', 'systems.csv'))
-    subsystems = pd.read_csv(os.path.join(pkg_dir, 'data', 'subsystems.csv'))
-    impeding_factor_medians = pd.read_csv(os.path.join(pkg_dir, 'data', 'impeding_factors.csv'))
-    tmp_repair_class = pd.read_csv(os.path.join(pkg_dir, 'data', 'temp_repair_class.csv'))
+    static_data_dir = os.path.join(pkg_dir, 'data')
+
+    subsystems = load_custom_static_tables(
+        input_dir, static_data_dir, 'subsystems.csv')
+    systems = load_custom_static_tables(
+        input_dir, static_data_dir, 'systems.csv')
+    impeding_factor_medians = load_custom_static_tables(
+        input_dir, static_data_dir, 'impeding_factors.csv')
+    tmp_repair_class = load_custom_static_tables(
+        input_dir, static_data_dir, 'temp_repair_class.csv')
+
     
     ## 5. Run Recovery Method
     from .engine import main_PBEE_recovery
