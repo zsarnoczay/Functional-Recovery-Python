@@ -138,7 +138,7 @@ The Python file listed below defines additional assessment inputs based on set o
 <!-- How does a user modify the static tables (now data) without touching the original data files? -->
 
 ### Static Data
-The csv tables listed below contain default component, damage state, system, and tenant function attributes that can be used to populate the required assessment inputs according to the methodology. Either in `input_builder.py` point to the location of these tables in the _data_ directory, or copy and modify them as you see fit and place them in the root directory of the build script.
+The csv tables listed below contain default component, damage state, system, and tenant function attributes that can be used to populate the required assessment inputs according to the methodology. These are located in the _data_ directory. To override the static data with custom versions, copy modified sheets and place them in the input directory.
  - **component_attributes.csv**: Attributes of components in the FEMA P-58 fragility database that are required for the functional recovery assessment.
  - **damage_state_attribute_mapping.csv**: Attributes of damage state in the FEMA P-58 fragility database and their affect on function and reoccupancy.
  - **subsystems.csv**: Attributes of each default subsystem considered in the method.
