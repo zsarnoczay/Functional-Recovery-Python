@@ -38,6 +38,14 @@ def recursive_update(d, u):
             d[k] = v
     return d
 
+def load_custom_static_tables(model_dir, static_dir, filename):
+    path = os.path.join(model_dir, filename)
+    if os.path.exists(path):
+        print(f"found custom {filename} in inputs. Overriding static tables...")
+    else:
+        path = os.path.join(static_dir, filename)
+    return pd.read_csv(path)
+
 
 def build_simulated_inputs(model_dir):
     """
@@ -56,14 +64,23 @@ def build_simulated_inputs(model_dir):
     """
         
     ''' PULL STATIC DATA
-    If the location of this directory differs, updat the static_data_dir variable below. '''
+    If static data tables exist in the input directory, use those. Else, use
+    the defaults in src/atc138/data/
+    '''
     
     static_data_dir = os.path.join(os.path.dirname(__file__), 'data')
 
-    component_attributes = pd.read_csv(os.path.join(static_data_dir, 'component_attributes.csv'))
-    damage_state_attribute_mapping  = pd.read_csv(os.path.join(static_data_dir, 'damage_state_attribute_mapping.csv'))
-    subsystems = pd.read_csv(os.path.join(static_data_dir, 'subsystems.csv'))
-    tenant_function_requirements = pd.read_csv(os.path.join(static_data_dir, 'tenant_function_requirements.csv'))
+    component_attributes = load_custom_static_tables(
+        model_dir, static_data_dir, 'component_attributes.csv')
+
+    damage_state_attribute_mapping = load_custom_static_tables(
+        model_dir, static_data_dir, 'damage_state_attribute_mapping.csv')
+
+    subsystems = load_custom_static_tables(
+        model_dir, static_data_dir, 'subsystems.csv')
+
+    tenant_function_requirements = load_custom_static_tables(
+        model_dir, static_data_dir, 'tenant_function_requirements.csv')
     
     
     ''' LOAD BUILDING DATA
