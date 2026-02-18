@@ -39,6 +39,21 @@ def recursive_update(d, u):
     return d
 
 def load_custom_static_tables(model_dir, static_dir, filename):
+    '''
+    Safely loads static tables if custom versions are found in model directory
+
+    Parameters
+    ----------
+    model_dir: string
+        Path to the directory containing raw input files.
+
+    static_dir: string
+        Path to the original default static tables
+
+    filename: string
+        Name of static table
+    '''
+    
     path = os.path.join(model_dir, filename)
     if os.path.exists(path):
         print(f"found custom {filename} in inputs. Overriding static tables...")
@@ -474,3 +489,6 @@ def build_simulated_inputs(model_dir):
     simulated_inputs = clean_types(simulated_inputs)
     
     return simulated_inputs
+
+def convert_pelicun(model_dir):
+    pass
