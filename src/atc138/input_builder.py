@@ -97,6 +97,14 @@ def build_simulated_inputs(model_dir):
     tenant_function_requirements = load_custom_static_tables(
         model_dir, static_data_dir, 'tenant_function_requirements.csv')
     
+    '''LOOK FOR RAW INPUTS
+    If Pelicun files exist, build from there
+    '''
+    pelicun_path = os.path.join(model_dir, 'DMG_sample.csv')
+    if os.path.exists(pelicun_path):
+        print(f"Pelicun outputs found in {model_dir}. Attempting build...")
+        convert_pelicun(model_dir)
+    
     
     ''' LOAD BUILDING DATA
     This data is specific to the building model and will need to be created
@@ -216,12 +224,12 @@ def build_simulated_inputs(model_dir):
     # Write in individual dictionaries part of larger 'damage' dictionary 
     damage = {'story' : {}, 'tenant_units' : {}}
     
-    if 'story' in list(sim_damage.keys()):
+    if 'tenant_units' in list(sim_damage.keys()):
         for tu in range(len(sim_damage['tenant_units'])):
             damage['tenant_units'][tu] = sim_damage['tenant_units'][tu]
     
     
-    if 'tenant_units' in list(sim_damage.keys()):
+    if 'story' in list(sim_damage.keys()):
         for s in range(len(sim_damage['story'])):
             damage['story'][s] = sim_damage['story'][s]
         
@@ -490,5 +498,398 @@ def build_simulated_inputs(model_dir):
     
     return simulated_inputs
 
+def save_json(data, path):
+    '''util to save json'''
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+def clean_frag_id(frag_id: str) -> str:
+    """
+    Remove characters at positions 2 and 5 
+    
+    To convert from B.10.10.100a to B1010.100a
+    """
+    return frag_id[0] + frag_id[2:4] + frag_id[5:]
+
+def story_mask(location, num_stories):
+    """Translate story selection"""
+    stories = np.arange(1, num_stories + 1)
+
+    if location == "all":
+        return np.ones(num_stories, dtype=bool)
+
+    if location == "roof":
+        mask = np.zeros(num_stories, dtype=bool)
+        mask[-1] = True
+        return mask
+
+    if "--" in location:
+        start, end = map(int, location.split("--"))
+        return (stories >= start) & (stories <= end)
+
+    loc_vec = np.array(location.split(), dtype=int)
+    return np.isin(stories, loc_vec)
+
 def convert_pelicun(model_dir):
-    pass
+    '''
+    Function to load in Pelicun files
+    
+    Requirements:
+        - CMP_QNT.csv: component sheet
+        - DL_summary.csv: summary of damage and loss, to read in irreparable cases
+        - DMG_sample.csv: damage sample of all realizations
+        - DV_repair_sample.csv: decision variable sample of all realizations
+        - general_inputs.json: egress, occupancy, dimensions
+        - input.json: JSON file with number of stories, replacement cost, plan area
+    '''
+
+    with open(os.path.join(model_dir, 'input.json')) as file:
+        pelicun_inputs = json.load(file)  
+        file.close()
+
+    ############ Pull basic model info from Pelicun Inputs
+    num_stories = int(pelicun_inputs['DL']['Asset']['NumberOfStories'])
+    # TODO: replacement cost is still "manual"
+    if 'Repair' in pelicun_inputs['DL']['Losses']:
+        total_cost = float(pelicun_inputs['DL']['Losses']['Repair']['ReplacementCost']['Median'])
+    else:
+        total_cost = float(pelicun_inputs['DL']['Losses']['BldgRepair']['ReplacementCost']['Median'])
+    plan_area = float(pelicun_inputs['DL']['Asset']['PlanArea'])
+
+    ########### Load Pelicun files
+    # pull components 
+    comps = pd.read_csv(os.path.join(model_dir, 'CMP_QNT.csv'))
+
+    # repair cost realizations
+    DV_summary = pd.read_csv(os.path.join(model_dir, 'DL_summary.csv'))
+
+    # damage realizations
+    damage = pd.read_csv(os.path.join(model_dir, 'DMG_sample.csv'))
+
+    # decision variables
+    if os.path.exists(os.path.join(model_dir, "DV_repair_sample.csv")):
+        dvs = pd.read_csv(os.path.join(model_dir, "DV_repair_sample.csv"))
+    else:
+        dvs = pd.read_csv(os.path.join(model_dir, "DV_bldg_repair_sample.csv"))
+
+    # ds attributes
+    static_data_dir = os.path.join(os.path.dirname(__file__), 'data')
+
+    ds_attributes = pd.read_csv(
+        os.path.join(static_data_dir, "damage_state_attribute_mapping.csv")
+    )
+
+    # general inputs
+    with open(os.path.join(model_dir, 'general_inputs.json')) as file:
+        general_inputs = json.load(file)  
+        file.close()
+
+
+    # Filter DMG columns
+    frag_cols = damage.columns[
+        damage.columns.str.match(r"^[B-F]")
+    ]
+    damage = damage[frag_cols]
+    # remove the units row
+    damage = damage[:-1]
+    DMG_ids = damage.columns.tolist()
+
+    # Filter DV columns
+    DV_time = dvs.loc[:, dvs.columns.str.startswith("TIME")]
+    DV_cost = dvs.loc[:, dvs.columns.str.startswith("COST")]
+
+
+    ########### building_model.json
+
+    # count number of stairs in the building
+    stair_mask = comps["ID"].str.contains("C.20.11", regex=False)
+    # Assumes number of vertical egress routes is the min number of stairs on any story. This is faulty logic and wont hold true for all comp tables 
+    num_stairs = comps.loc[stair_mask, "Theta_0"].min() if stair_mask.any() else 0
+
+    # Count the number of elevator bays in the building
+    elev_mask = comps["ID"].str.contains("D.10.14", regex=False)
+    num_elev = comps.loc[elev_mask, "Theta_0"].max() if elev_mask.any() else 0
+
+    # construct building_model.json
+    building_model = dict(
+        building_value=total_cost,
+        num_stories=num_stories,
+        area_per_story_sf=[plan_area] * num_stories,
+        ht_per_story_ft=[general_inputs["typ_story_ht_ft"]] * num_stories,
+        edge_lengths=[
+            [general_inputs["length_side_1_ft"]] * num_stories,
+            [general_inputs["length_side_2_ft"]] * num_stories,
+        ],
+        struct_bay_area_per_story=[
+            general_inputs["typ_struct_bay_area_ft"]
+        ] * num_stories,
+        num_entry_doors=general_inputs["num_entry_doors"],
+        num_elevators=int(num_elev),
+        stairs_per_story=[int(num_stairs)] * num_stories,
+        occupants_per_story=[
+            general_inputs["peak_occ_rate"] * plan_area
+        ] * num_stories,
+    )
+
+    save_json(building_model, os.path.join(model_dir, "building_model.json"))
+
+
+    ################ construct damage_consequences.json
+
+    # determine replacement cases
+    replacement_mask = DV_summary["collapse"].astype('int') | DV_summary["irreparable"].astype('int')
+
+    # calculate repair cost ratio
+    # TODO: check nomenclature "-" vs "_"
+
+    # TODO: missing racked stair doors per story, racked entry doors, repair cost ratio engineering
+    damage_consequences = dict(
+        repair_cost_ratio_total=(
+            DV_summary["repair_cost-"] / total_cost
+        ).tolist(),
+        simulated_replacement_time=np.where(
+            replacement_mask,
+            DV_summary["repair_time-parallel"],
+            np.nan,
+        ).tolist(),
+    )
+
+    save_json(
+        damage_consequences,
+        os.path.join(model_dir, "damage_consequences.json"),
+    )
+
+    ############### build comp_ds_list.csv
+
+    from re import search
+    # Unique components + clean frag_id
+    unique_frags = (
+        comps["ID"]
+        .dropna()
+        .unique()
+    )
+
+    frag_df = pd.DataFrame({
+        "comp_id": [clean_frag_id(f) for f in unique_frags]
+    })
+
+    # Cross-match using regex found in static table
+    rows = []
+
+    for _, frag_row in frag_df.iterrows():
+
+        frag_id = frag_row["comp_id"]
+
+        #  regex match
+        matches = ds_attributes[
+            ds_attributes["fragility_id_regex"]
+            .apply(lambda pat: bool(pd.notna(pat) and search(pat, frag_id)))
+        ]
+
+        if matches.empty:
+            continue
+
+        # Build rows in one go
+        temp = matches[["ds_index", "sub_ds_index"]].copy()
+        temp["comp_id"] = frag_id
+
+        rows.append(temp)
+
+    if not rows:
+        comp_ds_list = pd.DataFrame(
+            columns=["comp_id", "ds_seq_id", "ds_sub_id"]
+        )
+    else:
+        comp_ds_list = pd.concat(rows, ignore_index=True)
+
+        # Clean sub_ds_index
+        comp_ds_list["ds_sub_id"] = (
+            comp_ds_list["sub_ds_index"]
+            .replace(np.nan, 1)
+            .astype(float)
+            .astype(int)
+        )
+
+        comp_ds_list = comp_ds_list.rename(
+            columns={"ds_index": "ds_seq_id"}
+        )[["comp_id", "ds_seq_id", "ds_sub_id"]]
+
+    # Save
+    output_path = os.path.join(model_dir, "comp_ds_list.csv")
+    comp_ds_list.to_csv(output_path, index=False)
+
+
+    ################# construct comp_population.csv
+
+    # list of stories and directions
+    stories = np.arange(1, num_stories + 1)
+    dirs = np.array([1, 2, 3])
+
+    # handle multi index
+    multi_index = pd.MultiIndex.from_product(
+        [stories, dirs],
+        names=["story", "dir"]
+    )
+
+    comp_population = pd.DataFrame(index=multi_index)
+
+    # build comp_population.csv
+    for _, comp in comps.iterrows():
+
+        # remove first two periods 
+        temp_string = comp["ID"].replace(".", "", 1)
+        frag_id = temp_string.replace(".", "", 1)
+        frag_id = frag_id.replace('.', '_')
+        comp_population[frag_id] = 0.0
+
+        story_sel = story_mask(comp["Location"], num_stories)
+
+        dir_vec = np.array(
+            str(comp["Direction"]).replace("0", "3").split(","),
+            dtype=int
+        )
+
+        mask = (
+            np.isin(comp_population.index.get_level_values("story"), stories[story_sel])
+            & np.isin(comp_population.index.get_level_values("dir"), dir_vec)
+        )
+
+        comp_population.loc[mask, frag_id] += float(comp["Theta_0"])
+
+    comp_population.reset_index().to_csv(
+        os.path.join(model_dir, "comp_population.csv"),
+        index=False
+    )
+
+
+    #################### build simulated_damage.json
+    # parse damage column metadata
+    dmg_meta = []
+
+    for col in damage.columns:
+        parts = col.split("-")
+
+        dmg_meta.append({
+            "column": col,
+            "frag_id": f"{parts[0]}",
+            "story": int(parts[-3]),
+            "dir": int(parts[-2]) or 3,
+            "ds": int(parts[-1]),
+        })
+
+    dmg_meta = pd.DataFrame(dmg_meta)
+
+
+    # Map (frag_id, ds_seq, ds_sub) -> column index in comp_ds_list
+    comp_ds_list = comp_ds_list.reset_index(drop=True)
+    comp_ds_list["lookup_key"] = (
+        comp_ds_list["comp_id"]
+        + "_"
+        + comp_ds_list["ds_seq_id"].astype(str)
+        + "_"
+        + comp_ds_list["ds_sub_id"].astype(str)
+    )
+
+    lookup_index = {
+        key: idx
+        for idx, key in enumerate(comp_ds_list["lookup_key"])
+    }
+
+    num_reals = len(damage)
+    num_ds = len(comp_ds_list)
+
+    simulated_damage = {
+        "story": {}
+    }
+
+    for s in range(1, num_stories + 1):
+        simulated_damage["story"][s] = {
+            "qnt_damaged": np.zeros((num_reals, num_ds)),
+            "worker_days": np.zeros((num_reals, num_ds)),
+            "repair_cost": np.zeros((num_reals, num_ds)),
+            "qnt_damaged_dir_1": np.zeros((num_reals, num_ds)),
+            "qnt_damaged_dir_2": np.zeros((num_reals, num_ds)),
+            "qnt_damaged_dir_3": np.zeros((num_reals, num_ds)),
+            "num_comps": np.zeros(num_ds),
+        }
+
+    for _, meta in dmg_meta.iterrows():
+
+        story = meta["story"]
+        frag_id = meta["frag_id"]
+        frag_id = clean_frag_id(frag_id)
+        ds_seq = meta["ds"]
+        dir_id = meta["dir"]
+        col = meta["column"]
+
+        if story not in simulated_damage["story"]:
+            continue
+
+        # Build lookup key (assume sub_id = 1 unless mapping requires otherwise)
+        key = f"{frag_id}_{ds_seq}_1"
+
+        # TODO: are DS0's indexed?
+        if key not in lookup_index:
+            continue
+
+        # use lookup index to add damage sample 
+        idx = lookup_index[key]
+
+        dmg_data = np.array(damage[col].fillna(0), dtype=float)
+
+        simulated_damage["story"][story]["qnt_damaged"][:, idx] += dmg_data
+
+        if col in DV_time.columns:
+            simulated_damage["story"][story]["worker_days"][:, idx] += \
+                DV_time[col].fillna(0).to_numpy()
+
+        if col in DV_cost.columns:
+            simulated_damage["story"][story]["repair_cost"][:, idx] += \
+                DV_cost[col].fillna(0).to_numpy()
+
+        # Direction-specific
+        simulated_damage["story"][story][
+            f"qnt_damaged_dir_{dir_id}"
+        ][:, idx] += dmg_data
+
+
+        # add component quantity to simulated_damage
+        for _, comp in comps.iterrows():
+            frag_id = clean_frag_id(comp["ID"])
+            theta = comp["Theta_0"]
+
+            story_sel = story_mask(comp["Location"], num_stories)
+
+
+            frag_matches = comp_ds_list["comp_id"] == frag_id
+
+            for s_idx, is_story in enumerate(story_sel, start=1):
+                if not is_story:
+                    continue
+
+                simulated_damage["story"][s_idx]["num_comps"][frag_matches] += theta
+
+    ############# convert to json-serializable and save
+    # Convert numpy arrays to lists 
+    # TODO: what's the difference between tenant units and story?
+    story_list = []
+
+    for s in sorted(simulated_damage["story"].keys()):
+        story_content = simulated_damage["story"][s]
+        # convert arrays to lists
+        for key in story_content:
+            if hasattr(story_content[key], "tolist"):
+                story_content[key] = story_content[key].tolist()
+
+        story_list.append(story_content)
+
+    # Rebuild structure to match simulated_damage
+    simulated_damage = {
+        "tenant_units": story_list.copy(),  
+        "story": story_list
+    }
+
+    output_path = os.path.join(model_dir, "simulated_damage.json")
+
+    with open(output_path, "w") as f:
+        json.dump(simulated_damage, f, indent=2)
