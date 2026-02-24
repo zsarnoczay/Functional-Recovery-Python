@@ -24,6 +24,10 @@ def run_analysis(input_dir, output_dir, seed=None, force_rebuild=False):
     seed: int
         Random seed to be passed to the Numpy random engine. Default behavior
         is set as None and will not pass a random seed.
+
+    force_rebuild: bool
+        Flag to force rebuilding of simulated_inputs.json even if existing file is found. 
+        Default is set to False.
     """'''
     
     import time
