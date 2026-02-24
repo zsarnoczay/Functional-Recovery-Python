@@ -243,7 +243,7 @@ def plt_recovery_trajectory(recovery, full_repair_time, plot_dir):
     plt.plot(reoc, level_of_repair,'r-', linewidth = 1.5, label = 'Re-Occupancy') 
     plt.plot(func, level_of_repair,'b-', linewidth = 1.5, label= 'Functional') 
     plt.plot([full, full], [0, 1],'k-', linewidth = 1.5, label= 'Fully Repaired') 
-    # plt.xlim([0,np.ceil((full+1)/10)*10])
+    plt.xlim([0,np.ceil((full+1)/10)*10])
     plt.xlabel('Days After Earthquake')
     plt.ylabel('Fraction of Floor Area')
     plt.legend(loc='upper left')

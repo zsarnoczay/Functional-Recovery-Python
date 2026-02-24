@@ -1,4 +1,4 @@
-def plot_results(outputs_dir):
+def plot_results(outputs_dir, p_gantt=50):
     """
     Plot Functional Recovery Plots For a Single Model and Single Intensity
     
@@ -6,6 +6,9 @@ def plot_results(outputs_dir):
     ----------
     output dir: string
         Directory of outputs
+    p_gantt: float
+        percentile of functional recovery time to plot for the gantt chart
+        default: 50 = 50th percentile of functional recovery time (median)
     
     """
     import os
@@ -23,8 +26,6 @@ def plot_results(outputs_dir):
     
     # outputs will save to a directory with this name
     plot_dir = outputs_dir +'/plots' # Directory where the plots will be saved
-    p_gantt = 50 # percentile of functional recovery time to plot for the gantt chart
-                  #e.g., 50 = 50th percentile of functional recovery time
     
     ## Import Packages
     from plotters import main_plot_functionality
