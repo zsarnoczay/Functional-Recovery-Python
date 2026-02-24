@@ -642,10 +642,14 @@ def convert_pelicun(model_dir):
     # calculate repair cost ratio
     # TODO: check nomenclature "-" vs "_"
 
-    # TODO: missing racked stair doors per story, racked entry doors, repair cost ratio engineering
+    # TODO: missing racked stair doors per story, racked entry doors
+    # assuming that engineering is 10% of repair cost time
     damage_consequences = dict(
         repair_cost_ratio_total=(
             DV_summary["repair_cost-"] / total_cost
+        ).tolist(),
+        repair_cost_ratio_engineering=(
+            DV_summary["repair_cost-"] / total_cost / 10
         ).tolist(),
         simulated_replacement_time=np.where(
             replacement_mask,
