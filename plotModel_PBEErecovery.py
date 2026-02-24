@@ -1,12 +1,11 @@
-def plot_results(model_name):
+def plot_results(outputs_dir):
     """
     Plot Functional Recovery Plots For a Single Model and Single Intensity
     
     Parameters
     ----------
-    model_name: string
-        Name of the model. Inputs are expected to be in a directory with this 
-        name. Outputs will save to a directory with this name
+    output dir: string
+        Directory of outputs
     
     """
     import os
@@ -19,11 +18,10 @@ def plot_results(model_name):
     ## Define User inputs
     
     # Load systems information
-    systems = pd.read_csv(os.path.join(os.path.dirname(__file__), 'static_tables', 'systems.csv'))
+    systems = pd.read_csv(os.path.join(os.path.dirname(__file__), 'src', 'atc138', 'data', 'systems.csv'))
     systems = systems['name']
     
     # outputs will save to a directory with this name
-    outputs_dir = os.path.join(os.path.dirname(__file__), 'outputs/'+model_name) # Directory where the assessment outputs are saved
     plot_dir = outputs_dir +'/plots' # Directory where the plots will be saved
     p_gantt = 50 # percentile of functional recovery time to plot for the gantt chart
                   #e.g., 50 = 50th percentile of functional recovery time

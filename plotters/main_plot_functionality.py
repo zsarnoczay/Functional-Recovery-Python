@@ -43,7 +43,7 @@ def main_plot_functionality(functionality, save_dir, p_gantt, systems):
     
     ## Plot Mean Recovery Trajectories
     plot_dir = os.path.join(save_dir,'recovery_trajectories')
-    other_plot_functions.plt_recovery_trajectory( recovery, full_repair_time, plot_dir)
+    other_plot_functions.plt_recovery_trajectory(recovery, full_repair_time, plot_dir)
     
     # Plot Gantt Charts
     plot_dir = os.path.join(save_dir,'gantt_charts')

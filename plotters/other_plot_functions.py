@@ -157,7 +157,7 @@ def plt_heatmap_breakdowns(recovery, plot_dir):
     return
 
 
-def plt_histograms( recovery, plot_dir ):
+def plt_histograms(recovery, plot_dir):
     
     '''Plot all realizations of building level recovery as a histogram
     
@@ -197,7 +197,7 @@ def plt_histograms( recovery, plot_dir ):
     return
 
 
-def plt_recovery_trajectory( recovery, full_repair_time, plot_dir):
+def plt_recovery_trajectory(recovery, full_repair_time, plot_dir):
     '''Plot mean recovery trajectories
     
     Parameters
@@ -243,12 +243,12 @@ def plt_recovery_trajectory( recovery, full_repair_time, plot_dir):
     plt.plot(reoc, level_of_repair,'r-', linewidth = 1.5, label = 'Re-Occupancy') 
     plt.plot(func, level_of_repair,'b-', linewidth = 1.5, label= 'Functional') 
     plt.plot([full, full], [0, 1],'k-', linewidth = 1.5, label= 'Fully Repaired') 
-    plt.xlim([0,np.ceil((full+1)/10)*10])
+    # plt.xlim([0,np.ceil((full+1)/10)*10])
     plt.xlabel('Days After Earthquake')
     plt.ylabel('Fraction of Floor Area')
     plt.legend(loc='upper left')
+    plt.title('Mean Recovery Trajectories')
     plt.grid()
-    plt.show()
     
     plt.savefig(plot_dir + 'recovery_trajectory.png', dpi=300)
     
@@ -350,10 +350,14 @@ def plt_gantt_chart(p_idx, recovery, full_repair_time, workers, schedule, impede
     sys_repair_times = []
     labs = []
     for s in range(len(sys)): 
-        duration = schedule['full']['repair_complete_day']['per_system'][p_idx][s] - schedule['full']['repair_start_day']['per_system'][p_idx][s]
-        if duration > 0:
-            sys_repair_times.append([schedule['full']['repair_start_day']['per_system'][p_idx][s], duration])
-            labs.append(sys[s][0].upper() + sys[s][1:len(sys[s])] + ' Repairs')
+        end_day = schedule['full']['repair_complete_day']['per_system'][p_idx][s]
+        start_day = schedule['full']['repair_start_day']['per_system'][p_idx][s]
+        # TODO: edge case where repair_start_day is NaN?
+        if np.isnan(start_day):
+            start_day = 0.0
+        duration = end_day - start_day
+        sys_repair_times.append([start_day, duration])
+        labs.append(sys[s][0].upper() + sys[s][1:len(sys[s])] + ' Repairs')
 
     labs.reverse()    
     labs_rep = labs
