@@ -543,6 +543,8 @@ def convert_pelicun(model_dir):
         - input.json: JSON file with number of stories, replacement cost, plan area
     '''
 
+    from copy import deepcopy
+
     with open(os.path.join(model_dir, 'input.json')) as file:
         pelicun_inputs = json.load(file)  
         file.close()
@@ -592,12 +594,17 @@ def convert_pelicun(model_dir):
     damage = damage[frag_cols]
     # remove the units row
     damage = damage[:-1]
+    dvs = dvs[:-1]
     DMG_ids = damage.columns.tolist()
 
     # Filter DV columns
-    DV_time = dvs.loc[:, dvs.columns.str.startswith("TIME")]
-    DV_cost = dvs.loc[:, dvs.columns.str.startswith("COST")]
+    # TODO: not backwards compatible with allcaps formatting
+    DV_time = dvs.loc[:, dvs.columns.str.startswith("Time")]
+    DV_cost = dvs.loc[:, dvs.columns.str.startswith("Cost")]
 
+    # clean column formatting to just CMP-dir-loc-ds
+    DV_cost.columns = DV_cost.columns.str.replace(r'^.*?-.*?-', '', regex=True)
+    DV_time.columns = DV_time.columns.str.replace(r'^.*?-.*?-', '', regex=True)
 
     ########### building_model.json
 
@@ -840,16 +847,16 @@ def convert_pelicun(model_dir):
         idx = lookup_index[key]
 
         dmg_data = np.array(damage[col].fillna(0), dtype=float)
-
         simulated_damage["story"][story]["qnt_damaged"][:, idx] += dmg_data
 
         if col in DV_time.columns:
-            simulated_damage["story"][story]["worker_days"][:, idx] += \
-                DV_time[col].fillna(0).to_numpy()
+            repair_time_data = DV_time[col].fillna(0).astype(float)
+            simulated_damage["story"][story]["worker_days"][:, idx] += repair_time_data
 
         if col in DV_cost.columns:
-            simulated_damage["story"][story]["repair_cost"][:, idx] += \
-                DV_cost[col].fillna(0).to_numpy()
+            repair_cost_data = DV_cost[col].fillna(0).astype(float)
+            simulated_damage["story"][story]["repair_cost"][:, idx] += repair_cost_data
+            
 
         # Direction-specific
         simulated_damage["story"][story][
@@ -880,18 +887,26 @@ def convert_pelicun(model_dir):
 
     for s in sorted(simulated_damage["story"].keys()):
         story_content = simulated_damage["story"][s]
-        # convert arrays to lists
-        for key in story_content:
-            if hasattr(story_content[key], "tolist"):
-                story_content[key] = story_content[key].tolist()
 
-        story_list.append(story_content)
+        new_story = {
+            k: (v.tolist() if hasattr(v, "tolist") else v)
+            for k, v in story_content.items()
+        }
+        story_list.append(new_story)
+
+        # # convert arrays to lists
+        # for key in story_content:
+        #     if hasattr(story_content[key], "tolist"):
+        #         story_content[key] = story_content[key].tolist()
+
+        # story_list.append(story_content)
 
     # Rebuild structure to match simulated_damage
     simulated_damage = {
-        "tenant_units": story_list.copy(),  
+        "tenant_units": deepcopy(story_list),  
         "story": story_list
     }
+
 
     output_path = os.path.join(model_dir, "simulated_damage.json")
 

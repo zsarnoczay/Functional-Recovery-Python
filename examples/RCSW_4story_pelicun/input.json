@@ -82,7 +82,7 @@
                 },
                 "MapApproach": "Automatic",
                 "ReplacementCost": {
-                    "Median": "1728000",
+                    "Median": "1.1016467577433135E+7",
                     "Unit": "USD_2011"
                 },
                 "ReplacementTime": {
