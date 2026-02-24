@@ -1,4 +1,4 @@
-def run_analysis(input_dir, output_dir, seed=None):
+def run_analysis(input_dir, output_dir, seed=None, force_rebuild=False):
 
     '''This script facilitates the performance based functional recovery and
     reoccupancy assessment of a single building for a single intensity level
@@ -51,11 +51,11 @@ def run_analysis(input_dir, output_dir, seed=None):
     # Check if simulated_inputs.json exists, if not build it
     sim_inputs_path = os.path.join(input_dir, 'simulated_inputs.json')
     
-    if os.path.exists(sim_inputs_path):
+    if os.path.exists(sim_inputs_path) and not force_rebuild:
         f = open(sim_inputs_path)
         simulated_inputs = json.load(f)
     else:
-        print(f"simulated_inputs.json not found in {input_dir}. Building from raw inputs...")
+        print(f"Building simulated_inputs.json from raw inputs...")
         from .input_builder import build_simulated_inputs
         simulated_inputs = build_simulated_inputs(input_dir)
         
