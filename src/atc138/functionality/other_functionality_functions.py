@@ -1110,7 +1110,7 @@ def fn_tenant_function( damage, building_model, system_operation_day,
                 num_elev_pgs = len(np.unique(damage['comp_ds_table']['comp_idx'][damage['fnc_filters']['elevators']]))
                 is_sim_ds = any(damage['comp_ds_table']['is_sim_ds'][damage['fnc_filters']['elevators']])
                 if (num_elev_pgs > 1) and is_sim_ds:
-                    sys.exit('Error! PBEE_Recovery:Function','Elevator Function check does not handle multiple performance groups with simultaneous damage states')
+                    sys.exit('Error! PBEE_Recovery:Function: Elevator Function check does not handle multiple performance groups with simultaneous damage states')
                 
     
                 # quantifty the number of occupancy needing to use the elevators
