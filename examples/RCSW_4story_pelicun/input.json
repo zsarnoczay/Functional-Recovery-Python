@@ -69,7 +69,7 @@
                 "2": "0.005",
                 "method": "FEMA P-58"
             },
-            "SampleSize": "5000"
+            "SampleSize": "500"
         },
         "Losses": {
             "Repair": {
@@ -82,7 +82,7 @@
                 },
                 "MapApproach": "Automatic",
                 "ReplacementCost": {
-                    "Median": "1.1016467577433135E+7",
+                    "Median": "6912000",
                     "Unit": "USD_2011"
                 },
                 "ReplacementTime": {
@@ -265,15 +265,15 @@
         "samplingMethodData": {
             "method": "Monte Carlo",
             "samples": 500,
-            "seed": 861
+            "seed": 985
         },
         "saveWorkDir": true,
         "uqType": "Forward Propagation"
     },
-    "localAppDir": "C:/Users/hpham09/Documents/unsync_local/PBE_Windows_Download/PBE_Windows_Download",
+    "localAppDir": "X:/Documents/ubc_postdoc/teaching/PBE_Windows_Download/PBE_Windows_Download",
     "randomVariables": [
     ],
-    "remoteAppDir": "C:/Users/hpham09/Documents/unsync_local/PBE_Windows_Download/PBE_Windows_Download",
+    "remoteAppDir": "X:/Documents/ubc_postdoc/teaching/PBE_Windows_Download/PBE_Windows_Download",
     "runType": "runningLocal",
-    "workingDir": "C:/Users/hpham09/Documents\\PBE\\LocalWorkDir"
+    "workingDir": "{Current_Dir}/C:/Users/giraf/Documents/PBE/LocalWorkDir"
 }

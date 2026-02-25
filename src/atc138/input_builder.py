@@ -511,6 +511,22 @@ def clean_frag_id(frag_id: str) -> str:
     """
     return frag_id[0] + frag_id[2:4] + frag_id[5:]
 
+def reorder_dv_cols(col_name: str) -> str:
+    
+        
+    # damage column convention: cmp-loc-dir-ds, B.10.44.101-1-2-1
+    # DV column convention:  cmp-ds-loc-dir, B.10.44.101-1-1-2 (after cleaning)
+
+    parts = col_name.split("-")
+    cmp = parts[0]
+    ds = parts[1]
+    loc = parts[2]
+    dir = parts[-1]
+
+    reordered = [cmp, loc, dir, ds]
+
+    return '-'.join(reordered)
+
 def story_mask(location, num_stories):
     """Translate story selection"""
     stories = np.arange(1, num_stories + 1)
@@ -551,7 +567,7 @@ def convert_pelicun(model_dir):
 
     ############ Pull basic model info from Pelicun Inputs
     num_stories = int(pelicun_inputs['DL']['Asset']['NumberOfStories'])
-    # TODO: replacement cost is still "manual"
+    # HP: replacement cost is still "manual"
     if 'Repair' in pelicun_inputs['DL']['Losses']:
         total_cost = float(pelicun_inputs['DL']['Losses']['Repair']['ReplacementCost']['Median'])
     else:
@@ -597,14 +613,19 @@ def convert_pelicun(model_dir):
     dvs = dvs[:-1]
     DMG_ids = damage.columns.tolist()
 
+    # damage column convention: cmp-loc-dir-ds, B.10.44.101-1-2-1
+    # DV column convention:  dv-loss-dmg-ds-loc-dir, Cost-B.10.44.101-B.10.44.101-1-1-2
+
     # Filter DV columns
-    # TODO: not backwards compatible with allcaps formatting
+    # HP: not backwards compatible with allcaps formatting
     DV_time = dvs.loc[:, dvs.columns.str.startswith("Time")]
     DV_cost = dvs.loc[:, dvs.columns.str.startswith("Cost")]
 
-    # clean column formatting to just CMP-dir-loc-ds
+    # clean column formatting to just CMP-ds-loc-dir
     DV_cost.columns = DV_cost.columns.str.replace(r'^.*?-.*?-', '', regex=True)
+    DV_cost = DV_cost.rename(columns=reorder_dv_cols)
     DV_time.columns = DV_time.columns.str.replace(r'^.*?-.*?-', '', regex=True)
+    DV_time = DV_time.rename(columns=reorder_dv_cols)
 
     ########### building_model.json
 
@@ -647,9 +668,9 @@ def convert_pelicun(model_dir):
     replacement_mask = DV_summary["collapse"].astype('int') | DV_summary["irreparable"].astype('int')
 
     # calculate repair cost ratio
-    # TODO: check nomenclature "-" vs "_"
+    # HP: check nomenclature "-" vs "_"
 
-    # TODO: missing racked stair doors per story, racked entry doors
+    # HP: missing racked stair doors per story, racked entry doors
     # assuming that engineering is 10% of repair cost time
     damage_consequences = dict(
         repair_cost_ratio_total=(
@@ -780,11 +801,16 @@ def convert_pelicun(model_dir):
     for col in damage.columns:
         parts = col.split("-")
 
+        
+    # HP: hardcoded for the following convention (not backwards compatible)
+    # damage column convention: cmp-loc-dir-ds, B.10.44.101-1-2-1
+    # DV column convention:  dv-loss-dmg-ds-loc-dir, Cost-B.10.44.101-B.10.44.101-1-1-2
+
         dmg_meta.append({
             "column": col,
             "frag_id": f"{parts[0]}",
-            "story": int(parts[-3]),
-            "dir": int(parts[-2]) or 3,
+            "story": int(parts[1]),
+            "dir": int(parts[2]) or 3,
             "ds": int(parts[-1]),
         })
 
@@ -839,7 +865,7 @@ def convert_pelicun(model_dir):
         # Build lookup key (assume sub_id = 1 unless mapping requires otherwise)
         key = f"{frag_id}_{ds_seq}_1"
 
-        # TODO: are DS0's indexed?
+        # HP: are DS0's indexed?
         if key not in lookup_index:
             continue
 
@@ -882,7 +908,7 @@ def convert_pelicun(model_dir):
 
     ############# convert to json-serializable and save
     # Convert numpy arrays to lists 
-    # TODO: what's the difference between tenant units and story?
+    # HP: what's the difference between tenant units and story?
     story_list = []
 
     for s in sorted(simulated_damage["story"].keys()):
@@ -894,19 +920,11 @@ def convert_pelicun(model_dir):
         }
         story_list.append(new_story)
 
-        # # convert arrays to lists
-        # for key in story_content:
-        #     if hasattr(story_content[key], "tolist"):
-        #         story_content[key] = story_content[key].tolist()
-
-        # story_list.append(story_content)
-
     # Rebuild structure to match simulated_damage
     simulated_damage = {
         "tenant_units": deepcopy(story_list),  
         "story": story_list
     }
-
 
     output_path = os.path.join(model_dir, "simulated_damage.json")
 
