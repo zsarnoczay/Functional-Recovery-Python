@@ -908,7 +908,8 @@ def convert_pelicun(model_dir):
 
     ############# convert to json-serializable and save
     # Convert numpy arrays to lists 
-    # HP: what's the difference between tenant units and story?
+    # HP: what's the difference between tenant units and story? these shouldn't be copies of each other
+    # HP: missing "side" damage separation for cladding
     story_list = []
 
     for s in sorted(simulated_damage["story"].keys()):
@@ -925,6 +926,11 @@ def convert_pelicun(model_dir):
         "tenant_units": deepcopy(story_list),  
         "story": story_list
     }
+
+    # # HP: some troubleshooting prints to verify rebuild 
+    # print("QNT SUM:", np.sum(simulated_damage["tenant_units"][0]["qnt_damaged"]))
+    # print("COST SUM:", np.sum(simulated_damage["tenant_units"][0]["repair_cost"]))
+    # print("TIME SUM:", np.sum(simulated_damage["tenant_units"][0]["worker_days"]))
 
     output_path = os.path.join(model_dir, "simulated_damage.json")
 
