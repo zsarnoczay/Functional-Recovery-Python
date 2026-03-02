@@ -617,9 +617,8 @@ def convert_pelicun(model_dir):
     # DV column convention:  dv-loss-dmg-ds-loc-dir, Cost-B.10.44.101-B.10.44.101-1-1-2
 
     # Filter DV columns
-    # HP: not backwards compatible with allcaps formatting
-    DV_time = dvs.loc[:, dvs.columns.str.startswith("Time")]
-    DV_cost = dvs.loc[:, dvs.columns.str.startswith("Cost")]
+    DV_time = dvs.loc[:, dvs.columns.str.upper().str.startswith("TIME")]
+    DV_cost = dvs.loc[:, dvs.columns.str.upper().str.startswith("COST")]
 
     # clean column formatting to just CMP-ds-loc-dir
     DV_cost.columns = DV_cost.columns.str.replace(r'^.*?-.*?-', '', regex=True)
@@ -635,6 +634,7 @@ def convert_pelicun(model_dir):
     num_stairs = comps.loc[stair_mask, "Theta_0"].min() if stair_mask.any() else 0
 
     # Count the number of elevator bays in the building
+    # HP: should there be an override for this (manual elevator specification not in CMP list)
     elev_mask = comps["ID"].str.contains("D.10.14", regex=False)
     num_elev = comps.loc[elev_mask, "Theta_0"].max() if elev_mask.any() else 0
 
@@ -847,8 +847,18 @@ def convert_pelicun(model_dir):
             "qnt_damaged_dir_1": np.zeros((num_reals, num_ds)),
             "qnt_damaged_dir_2": np.zeros((num_reals, num_ds)),
             "qnt_damaged_dir_3": np.zeros((num_reals, num_ds)),
+            "qnt_damaged_side_1": np.zeros((num_reals, num_ds)),
+            "qnt_damaged_side_2": np.zeros((num_reals, num_ds)),
+            "qnt_damaged_side_3": np.zeros((num_reals, num_ds)),
+            "qnt_damaged_side_4": np.zeros((num_reals, num_ds)),
             "num_comps": np.zeros(num_ds),
         }
+
+    
+    # HP: randomly split damage between 4 sides, assumes square footprint
+    ratio_damage_per_side = np.random.rand(num_reals,4) # assumes square footprint
+    dmg_per_row = ratio_damage_per_side.sum(axis=1, keepdims=True)
+    ratio_damage_per_side = ratio_damage_per_side / dmg_per_row # force it to add to one
 
     for _, meta in dmg_meta.iterrows():
 
@@ -883,6 +893,11 @@ def convert_pelicun(model_dir):
             repair_cost_data = DV_cost[col].fillna(0).astype(float)
             simulated_damage["story"][story]["repair_cost"][:, idx] += repair_cost_data
             
+        
+        simulated_damage["story"][story]["qnt_damaged_side_1"][:, idx] = ratio_damage_per_side[:,0]*simulated_damage["story"][story]["qnt_damaged"][:, idx]
+        simulated_damage["story"][story]["qnt_damaged_side_2"][:, idx] = ratio_damage_per_side[:,1]*simulated_damage["story"][story]["qnt_damaged"][:, idx]
+        simulated_damage["story"][story]["qnt_damaged_side_3"][:, idx] = ratio_damage_per_side[:,2]*simulated_damage["story"][story]["qnt_damaged"][:, idx]
+        simulated_damage["story"][story]["qnt_damaged_side_4"][:, idx] = ratio_damage_per_side[:,3]*simulated_damage["story"][story]["qnt_damaged"][:, idx]
 
         # Direction-specific
         simulated_damage["story"][story][
@@ -908,22 +923,38 @@ def convert_pelicun(model_dir):
 
     ############# convert to json-serializable and save
     # Convert numpy arrays to lists 
-    # HP: what's the difference between tenant units and story? these shouldn't be copies of each other
-    # HP: missing "side" damage separation for cladding
     story_list = []
+    tu_list = []
+
+    # place damage breakdown into tu and story divisions
+    tenant_categories = ['repair_cost', 'num_comps', 'qnt_damaged',
+                         'qnt_damaged_side_1', 'qnt_damaged_side_2', 
+                         'qnt_damaged_side_3', 'qnt_damaged_side_4',
+                         'worker_days']
+    story_categories = ['qnt_damaged_dir_1', 'qnt_damaged_dir_2', 
+                         'qnt_damaged_dir_3']
 
     for s in sorted(simulated_damage["story"].keys()):
         story_content = simulated_damage["story"][s]
 
         new_story = {
             k: (v.tolist() if hasattr(v, "tolist") else v)
-            for k, v in story_content.items()
+            for k, v in story_content.items() if k in story_categories
         }
         story_list.append(new_story)
 
+    for s in sorted(simulated_damage["story"].keys()):
+        tu_content = simulated_damage["story"][s]
+
+        new_tu = {
+            k: (v.tolist() if hasattr(v, "tolist") else v)
+            for k, v in tu_content.items() if k in tenant_categories
+        }
+        tu_list.append(new_tu)
+
     # Rebuild structure to match simulated_damage
     simulated_damage = {
-        "tenant_units": deepcopy(story_list),  
+        "tenant_units": tu_list,  
         "story": story_list
     }
 
