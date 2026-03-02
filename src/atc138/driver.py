@@ -51,6 +51,12 @@ def run_analysis(input_dir, output_dir, seed=None, force_rebuild=False):
     ## 2. Define User Inputs
     # Input/Output directories are passed as arguments
     
+    # set a seed
+    # this seed propagates through the entire subfunctions
+    # so if subfunction requires a distinct random variate, a seed instance will have to be used instead
+    if seed is not None:
+        np.random.seed(seed)
+    
     ## 3. Load FEMA P-58 performance model data and simulated damage and loss
     # Check if simulated_inputs.json exists, if not build it
     sim_inputs_path = os.path.join(input_dir, 'simulated_inputs.json')
@@ -132,12 +138,6 @@ def run_analysis(input_dir, output_dir, seed=None, force_rebuild=False):
     
     ## 5. Run Recovery Method
     from .engine import main_PBEE_recovery
-
-    # set a seed
-    # this seed propagates through the entire subfunctions
-    # so if subfunction requires a distinct random variate, a seed instance will have to be used instead
-    if seed is not None:
-        np.random.seed(seed)
     
     functionality, damage_consequences = main_PBEE_recovery(damage, 
                                                             damage_consequences, 
