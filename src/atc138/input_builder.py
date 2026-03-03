@@ -567,7 +567,6 @@ def convert_pelicun(model_dir):
 
     ############ Pull basic model info from Pelicun Inputs
     num_stories = int(pelicun_inputs['DL']['Asset']['NumberOfStories'])
-    # HP: replacement cost is still "manual"
     if 'Repair' in pelicun_inputs['DL']['Losses']:
         total_cost = float(pelicun_inputs['DL']['Losses']['Repair']['ReplacementCost']['Median'])
     else:
@@ -772,7 +771,10 @@ def convert_pelicun(model_dir):
         temp_string = comp["ID"].replace(".", "", 1)
         frag_id = temp_string.replace(".", "", 1)
         frag_id = frag_id.replace('.', '_')
-        comp_population[frag_id] = 0.0
+
+        # initiate the frag_id column iff it doesn't exist
+        if frag_id not in comp_population.columns:
+            comp_population[frag_id] = 0.0
 
         story_sel = story_mask(comp["Location"], num_stories)
 
@@ -875,7 +877,6 @@ def convert_pelicun(model_dir):
         # Build lookup key (assume sub_id = 1 unless mapping requires otherwise)
         key = f"{frag_id}_{ds_seq}_1"
 
-        # HP: are DS0's indexed?
         if key not in lookup_index:
             continue
 
