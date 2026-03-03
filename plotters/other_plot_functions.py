@@ -352,9 +352,6 @@ def plt_gantt_chart(p_idx, recovery, full_repair_time, workers, schedule, impede
     for s in range(len(sys)): 
         end_day = schedule['full']['repair_complete_day']['per_system'][p_idx][s]
         start_day = schedule['full']['repair_start_day']['per_system'][p_idx][s]
-        # TODO: edge case where repair_start_day is NaN?
-        if np.isnan(start_day):
-            start_day = 0.0
         duration = end_day - start_day
         sys_repair_times.append([start_day, duration])
         labs.append(sys[s][0].upper() + sys[s][1:len(sys[s])] + ' Repairs')
