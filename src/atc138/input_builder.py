@@ -670,13 +670,18 @@ def convert_pelicun(model_dir):
     # HP: check nomenclature "-" vs "_"
 
     # HP: missing racked stair doors per story, racked entry doors
-    # assuming that engineering is 10% of repair cost time
+
+    if 'engineering_cost_ratio' not in general_inputs:
+        eng_cost_ratio = 0.10
+    else:
+        eng_cost_ratio = general_inputs['engineering_cost_ratio']
+        
     damage_consequences = dict(
         repair_cost_ratio_total=(
             DV_summary["repair_cost-"] / total_cost
         ).tolist(),
         repair_cost_ratio_engineering=(
-            DV_summary["repair_cost-"] / total_cost / 10
+            DV_summary["repair_cost-"] / total_cost * eng_cost_ratio
         ).tolist(),
         simulated_replacement_time=np.where(
             replacement_mask,
