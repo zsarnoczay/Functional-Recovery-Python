@@ -675,7 +675,7 @@ def convert_pelicun(model_dir):
         eng_cost_ratio = 0.10
     else:
         eng_cost_ratio = general_inputs['engineering_cost_ratio']
-        
+
     damage_consequences = dict(
         repair_cost_ratio_total=(
             DV_summary["repair_cost-"] / total_cost
@@ -933,6 +933,7 @@ def convert_pelicun(model_dir):
     tu_list = []
 
     # place damage breakdown into tu and story divisions
+    # HP: if there is a category not covered below, it will be missed
     tenant_categories = ['repair_cost', 'num_comps', 'qnt_damaged',
                          'qnt_damaged_side_1', 'qnt_damaged_side_2', 
                          'qnt_damaged_side_3', 'qnt_damaged_side_4',
