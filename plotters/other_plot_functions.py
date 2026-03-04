@@ -266,6 +266,27 @@ def plt_recovery_trajectory(recovery, full_repair_time, plot_dir):
     plt.grid()    
 
     plt.savefig(plot_dir + 'functional_recovery_trajectories.png', dpi=300)
+
+    med = np.median(np.array(recovery['reoccupancy']['recovery_trajectory']['recovery_day']), axis=0)
+    per_10 = np.percentile(np.array(recovery['reoccupancy']['recovery_trajectory']['recovery_day']), 10, axis=0)
+    per_90 = np.percentile(np.array(recovery['reoccupancy']['recovery_trajectory']['recovery_day']), 90, axis=0)
+    full = np.mean(full_repair_time)
+    level_of_repair = recovery['reoccupancy']['recovery_trajectory']['percent_recovered']
+
+    plt.figure(figsize=(6,4))
+    for i in range(len(recovery['reoccupancy']['recovery_trajectory']['recovery_day'])):
+        plt.plot(recovery['reoccupancy']['recovery_trajectory']['recovery_day'][i] , level_of_repair, color = 'lightgrey', linewidth = 0.5)
+    plt.plot(med, level_of_repair,'r-', linewidth = 1.5, label= 'Median')
+    plt.plot(per_10, level_of_repair,'b--', linewidth = 1.0, label= '10th percentile')
+    plt.plot(per_90, level_of_repair,'b--', linewidth = 1.0, label= '90th percentile')
+    plt.xlim([0,np.ceil((max(max(recovery['reoccupancy']['recovery_trajectory']['recovery_day'])))/10)*10])
+    plt.title('Reoccupancy Trajectories')
+    plt.xlabel('Days After Earthquake')
+    plt.ylabel('Fraction of Floor Area')
+    plt.legend(loc='upper left')
+    plt.grid()    
+
+    plt.savefig(plot_dir + 'reoccupancy_trajectories.png', dpi=300)
     
     return
 
