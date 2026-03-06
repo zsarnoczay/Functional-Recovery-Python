@@ -511,21 +511,35 @@ def clean_frag_id(frag_id: str) -> str:
     """
     return frag_id[0] + frag_id[2:4] + frag_id[5:]
 
-def reorder_dv_cols(col_name: str) -> str:
-    
-        
-    # damage column convention: cmp-loc-dir-ds, B.10.44.101-1-2-1
-    # DV column convention:  cmp-ds-loc-dir, B.10.44.101-1-1-2 (after cleaning)
+def reorder_dv_cols(df, dv_tag_meta, ordered_tags=("dmg","loc","dir","ds")):
+    """
+    Rename columns from dv-loss-dmg-ds-loc-dir -> dmg-loc-dir-ds.
 
-    parts = col_name.split("-")
-    cmp = parts[0]
-    ds = parts[1]
-    loc = parts[2]
-    dir = parts[-1]
+    Parameters
+    ----------
+    df : pandas.DataFrame
+    dv_tag_meta : list[str]
+        Order of tags in the column names.
+    ordered_tags : tuple[str]
+        Tags to retain in output column names.
 
-    reordered = [cmp, loc, dir, ds]
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with renamed columns.
+    """
+    keep_idx = [dv_tag_meta.index(k) for k in ordered_tags]
 
-    return '-'.join(reordered)
+    new_cols = []
+    for col in df.columns:
+        parts = col.split("-")
+        if len(parts) == len(dv_tag_meta):
+            new_cols.append("-".join(parts[i] for i in keep_idx))
+        else:
+            new_cols.append(col)
+
+    df.columns = new_cols
+    return df
 
 def story_mask(location, num_stories):
     """Translate story selection"""
@@ -589,6 +603,13 @@ def convert_pelicun(model_dir):
     else:
         dvs = pd.read_csv(os.path.join(model_dir, "DV_bldg_repair_sample.csv"))
 
+    # siding damage ratio
+    if os.path.exists(os.path.join(model_dir, "side_damage_ratio.csv")):
+        ratio_damage_per_side = np.loadtxt(
+            os.path.join(model_dir, "side_damage_ratio.csv"), delimiter=',')
+    else:
+        ratio_damage_per_side = None
+
     # ds attributes
     static_data_dir = os.path.join(os.path.dirname(__file__), 'data')
 
@@ -602,11 +623,14 @@ def convert_pelicun(model_dir):
         file.close()
 
 
-    # Filter DMG columns
+    # Get meta-naming convention, then filter to just cmp columns
+    # (case insensitive)
+    tag_name_list = damage.columns[0].lower().split('-')
     frag_cols = damage.columns[
         damage.columns.str.match(r"^[B-F]")
     ]
     damage = damage[frag_cols]
+
     # remove the units row
     damage = damage[:-1]
     dvs = dvs[:-1]
@@ -616,26 +640,34 @@ def convert_pelicun(model_dir):
     # DV column convention:  dv-loss-dmg-ds-loc-dir, Cost-B.10.44.101-B.10.44.101-1-1-2
 
     # Filter DV columns
+    dv_tag_meta = dvs.columns[0].lower().split('-')
     DV_time = dvs.loc[:, dvs.columns.str.upper().str.startswith("TIME")]
     DV_cost = dvs.loc[:, dvs.columns.str.upper().str.startswith("COST")]
 
-    # clean column formatting to just CMP-ds-loc-dir
-    DV_cost.columns = DV_cost.columns.str.replace(r'^.*?-.*?-', '', regex=True)
-    DV_cost = DV_cost.rename(columns=reorder_dv_cols)
-    DV_time.columns = DV_time.columns.str.replace(r'^.*?-.*?-', '', regex=True)
-    DV_time = DV_time.rename(columns=reorder_dv_cols)
+    # reformat dv columns to cmp-loc-dir-ds
+    DV_cost = reorder_dv_cols(DV_cost, dv_tag_meta)
+    DV_time = reorder_dv_cols(DV_time, dv_tag_meta)
 
     ########### building_model.json
 
-    # count number of stairs in the building
-    stair_mask = comps["ID"].str.contains("C.20.11", regex=False)
-    # Assumes number of vertical egress routes is the min number of stairs on any story. This is faulty logic and wont hold true for all comp tables 
-    num_stairs = comps.loc[stair_mask, "Theta_0"].min() if stair_mask.any() else 0
+    # if stairs_per_story is not provided, calculate from CMP_QNT
+    if 'stairs_per_story' not in general_inputs:
+        # count number of stairs in the building
+        stair_mask = comps["ID"].str.contains("C.20.11", regex=False)
+        # Assumes number of vertical egress routes is the min number of stairs on any story. This is faulty logic and wont hold true for all comp tables 
+        num_stairs = comps.loc[stair_mask, "Theta_0"].min() if stair_mask.any() else 0
+        stairs_per_story = [int(num_stairs)] * num_stories
+    else:
+        stairs_per_story = general_inputs['stairs_per_story']
 
-    # Count the number of elevator bays in the building
-    # HP: should there be an override for this (manual elevator specification not in CMP list)
-    elev_mask = comps["ID"].str.contains("D.10.14", regex=False)
-    num_elev = comps.loc[elev_mask, "Theta_0"].max() if elev_mask.any() else 0
+    # if num_elevators is not provided, calculate from CMP_QNT
+    if 'num_elevators' not in general_inputs:
+        # Count the number of elevator bays in the building
+        # HP: should there be an override for this (manual elevator specification not in CMP list)
+        elev_mask = comps["ID"].str.contains("D.10.14", regex=False)
+        num_elev = comps.loc[elev_mask, "Theta_0"].max() if elev_mask.any() else 0
+    else:
+        num_elev = general_inputs['num_elevators']
 
     # construct building_model.json
     building_model = dict(
@@ -652,7 +684,7 @@ def convert_pelicun(model_dir):
         ] * num_stories,
         num_entry_doors=general_inputs["num_entry_doors"],
         num_elevators=int(num_elev),
-        stairs_per_story=[int(num_stairs)] * num_stories,
+        stairs_per_story=stairs_per_story,
         occupants_per_story=[
             general_inputs["peak_occ_rate"] * plan_area
         ] * num_stories,
@@ -807,18 +839,16 @@ def convert_pelicun(model_dir):
 
     for col in damage.columns:
         parts = col.split("-")
-
         
-    # HP: hardcoded for the following convention (not backwards compatible)
+    # find location of 'cmp-loc-dir-ds' and reassign
     # damage column convention: cmp-loc-dir-ds, B.10.44.101-1-2-1
-    # DV column convention:  dv-loss-dmg-ds-loc-dir, Cost-B.10.44.101-B.10.44.101-1-1-2
 
         dmg_meta.append({
             "column": col,
-            "frag_id": f"{parts[0]}",
-            "story": int(parts[1]),
-            "dir": int(parts[2]) or 3,
-            "ds": int(parts[-1]),
+            "frag_id": f"{parts[tag_name_list.index('cmp')]}",
+            "story": int(parts[tag_name_list.index('loc')]),
+            "dir": int(parts[tag_name_list.index('dir')]) or 3,
+            "ds": int(parts[tag_name_list.index('ds')]),
         })
 
     dmg_meta = pd.DataFrame(dmg_meta)
@@ -862,10 +892,13 @@ def convert_pelicun(model_dir):
         }
 
     
-    # HP: randomly split damage between 4 sides, assumes square footprint
-    ratio_damage_per_side = np.random.rand(num_reals,4) # assumes square footprint
-    dmg_per_row = ratio_damage_per_side.sum(axis=1, keepdims=True)
-    ratio_damage_per_side = ratio_damage_per_side / dmg_per_row # force it to add to one
+    # if no side-damage is specified, randomly distribute between 2 directions, then split between sides
+    # two parallel sides will have the same damage
+    if ratio_damage_per_side is None:
+        ratio_damage_per_side = np.random.rand(num_reals,2) # assumes square footprint
+        dmg_per_row = ratio_damage_per_side.sum(axis=1, keepdims=True)
+        # normalize to 1, then split between two parallel sides
+        ratio_damage_per_side = ratio_damage_per_side / dmg_per_row / 2 
 
     for _, meta in dmg_meta.iterrows():
 
@@ -902,8 +935,8 @@ def convert_pelicun(model_dir):
         
         simulated_damage["story"][story]["qnt_damaged_side_1"][:, idx] = ratio_damage_per_side[:,0]*simulated_damage["story"][story]["qnt_damaged"][:, idx]
         simulated_damage["story"][story]["qnt_damaged_side_2"][:, idx] = ratio_damage_per_side[:,1]*simulated_damage["story"][story]["qnt_damaged"][:, idx]
-        simulated_damage["story"][story]["qnt_damaged_side_3"][:, idx] = ratio_damage_per_side[:,2]*simulated_damage["story"][story]["qnt_damaged"][:, idx]
-        simulated_damage["story"][story]["qnt_damaged_side_4"][:, idx] = ratio_damage_per_side[:,3]*simulated_damage["story"][story]["qnt_damaged"][:, idx]
+        simulated_damage["story"][story]["qnt_damaged_side_3"][:, idx] = ratio_damage_per_side[:,0]*simulated_damage["story"][story]["qnt_damaged"][:, idx]
+        simulated_damage["story"][story]["qnt_damaged_side_4"][:, idx] = ratio_damage_per_side[:,1]*simulated_damage["story"][story]["qnt_damaged"][:, idx]
 
         # Direction-specific
         simulated_damage["story"][story][
