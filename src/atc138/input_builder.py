@@ -612,16 +612,16 @@ def convert_pelicun(model_dir):
 
     # ds attributes
     static_data_dir = os.path.join(os.path.dirname(__file__), 'data')
-
-    ds_attributes = pd.read_csv(
-        os.path.join(static_data_dir, "damage_state_attribute_mapping.csv")
-    )
+    ds_attributes = load_custom_static_tables(model_dir, static_data_dir, 'damage_state_attribute_mapping.csv')
 
     # general inputs
     with open(os.path.join(model_dir, 'general_inputs.json')) as file:
-        general_inputs = json.load(file)  
-        file.close()
+        general_inputs = json.load(file)
 
+    # remove Units row (case insensitive)
+    # the first column is the cmp-loc-dir-ds or dv-loss-dmg-ds-loc-dir indicator
+    damage = damage[~damage.iloc[:,0].astype(str).str.lower().str.contains('unit')]
+    dvs = dvs[~dvs.iloc[:,0].astype(str).str.lower().str.contains('unit')]
 
     # Get meta-naming convention, then filter to just cmp columns
     # (case insensitive)
@@ -630,11 +630,6 @@ def convert_pelicun(model_dir):
         damage.columns.str.match(r"^[B-F]")
     ]
     damage = damage[frag_cols]
-
-    # remove the units row
-    damage = damage[:-1]
-    dvs = dvs[:-1]
-    DMG_ids = damage.columns.tolist()
 
     # damage column convention: cmp-loc-dir-ds, B.10.44.101-1-2-1
     # DV column convention:  dv-loss-dmg-ds-loc-dir, Cost-B.10.44.101-B.10.44.101-1-1-2
