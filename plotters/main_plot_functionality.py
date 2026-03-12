@@ -1,6 +1,7 @@
 def plot_results(outputs_dir, p_gantt=50):
     """
-    Plot Functional Recovery Plots For a Single Model and Single Intensity
+    This method wraps `main_plot_functionality` to call all functionality/reoccupancy recovery
+    plots by requiring only the directory of the output.
     
     Parameters
     ----------
@@ -37,8 +38,13 @@ def plot_results(outputs_dir, p_gantt=50):
     main_plot_functionality(functionality, plot_dir, p_gantt, systems)
 
 def main_plot_functionality(functionality, save_dir, p_gantt, systems):
-    '''Plot function and occupancy loss and recovery at for a single model at a 
-    single intensity levels
+    '''
+    This method calls all functionality and occupancy loss and recovery plots, including the following
+    - Component and system-level breakdowns of hinderance to reoccupancy and functional status per day
+    - Distribution of realizations achieving reoccupancy and functional status per day
+    - Mean and per-realization breakdown of recovery trajectories
+    - Gantt chart of impeding factors, repair work, number of workers, 
+    and recovery status of building per day for the realization with `p_gantt`-th percentile of functional recovery day. 
     
     Parameters
     ----------

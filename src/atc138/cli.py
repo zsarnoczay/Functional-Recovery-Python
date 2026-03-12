@@ -8,7 +8,7 @@ def main():
     parser.add_argument("input_dir", help="Path to the directory containing input files (e.g., simulated_inputs.json)")
     parser.add_argument("output_dir", help="Path to the directory where outputs will be saved")
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility", default=None)
-    parser.add_argument("--force_rebuild", type=bool, help="Flag to force override of simulated_inputs.json and rebuild", default=False)
+    parser.add_argument("--force_rebuild", action="store_true", help="Flag to force override of simulated_inputs.json and rebuild", default=False)
 
     args = parser.parse_args()
 

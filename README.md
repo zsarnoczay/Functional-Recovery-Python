@@ -40,6 +40,8 @@ You should see the command help output with available options.
 
 An assessment can be run directly from the command line, or as imported within a Python workflow. If `simulated_inputs.json` does not exist, it will be created using default inputs within `src/atc138/data`. Various assessment options can be overridden by placing them in file `optional_inputs.json` file within the input directory. This file can be customized for each assessment if desired and will be set as default values if not specified.
 
+If `simulated_inputs.json` exists, the input builder will not re-run unless `--force_rebuild` is used in the CLI command.
+
 ### Running from the command line
 
 With the input directory containing the necessary inputs, perform an assessment by running:
@@ -66,6 +68,24 @@ output_dir = './examples/ICSB/output'
 
 driver.run_analysis(example_dir, output_dir, seed=985)
 ```
+
+If `simulated_inputs.json` exists, the input builder will not re-run unless the argument `force_rebuild=True` is used for `driver.run_analysis`.
+
+### Plotting outputs
+
+Several basic plotting tools are provided in `plotters/`, which can be used after an analysis generates results. This is run with
+
+```python
+from plotters.main_plot_functionality import plot_results
+output_dir = './examples/ICSB/output'
+plot_results(output_dir, p_gantt=50) # plot median realization
+```
+
+which will plot:
+- Component and system-level breakdowns of hinderance to reoccupancy and functional status per day
+- Distribution of realizations achieving reoccupancy and functional status per day
+- Mean and per-realization breakdown of recovery trajectories
+- Gantt chart of impeding factors, repair work, number of workers, and recovery status of building per day for the realization with  `p_gantt`-th percentile of functional recovery day. 
 
 ## Example Inputs
 Four example inputs are provided to help illustrate both the construction of the inputs file and the implementation. These files are located in the `examples/` directory and can be run through the assessment by setting the variable names accordingly above.
@@ -150,7 +170,7 @@ This conversion module is compatible with PBE Application version ~=4.4 and peli
  - **CMP_QNT.csv**: component sheet
  - **DL_summary.csv**: summary of damage and loss, to read in irreparable cases
  - **DMG_sample.csv**: damage sample of all realizations
- - **DV_repair_sample.csv**: decision variable sample of all realizations
+ - **DV_repair_sample.csv**: decision variable sample of all realizations. The legacy name **DV_bldg_repair_sample.csv** is supported as a fallback name.
  - **general_inputs.json**: egress, occupancy, dimensions, ratio of engineering cost as a fraction of total repair cost. Number of elevators or stairs per story can also be explicitly specified here if it is desired to override the quantity in CMP_QNT.
  - **input.json**: JSON file with number of stories, replacement cost, plan area
  - **side_damage_ratio.csv** (optional): CSV of size num_reals x 2, specifies the damage distributed to each side for cladding components. This fraction is constant across the height of the building. Column 1 is the fraction of damaged components in direction 0, side 1. Column 2 is the fraction of damaged components in direction 1, side 1. These should sum up to 0.5. Parallel sides will have the same fraction of damage. If not provided, these ratios will be sampled uniformly for all realizations.

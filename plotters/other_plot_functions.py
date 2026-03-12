@@ -1,3 +1,12 @@
+'''
+Individual subfunctions for generating plots:
+- component/system impedance heatmaps
+- histograms
+- lineplots of recovery per system
+- gantt chart
+- recovery trajectory breakdowns
+'''
+
 def plt_heatmap_breakdowns(recovery, plot_dir):
     '''Plot the time and percent of realizations that each system and/or 
     component is impeding function as a heatmap and as lineplots

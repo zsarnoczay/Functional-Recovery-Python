@@ -505,11 +505,13 @@ def save_json(data, path):
 
 def clean_frag_id(frag_id: str) -> str:
     """
-    Remove characters at positions 2 and 5 
+    Splits by ".", 
+    returns string up until last period + "." + string after last period
     
-    To convert from B.10.10.100a to B1010.100a
+    e.g. to convert from B.10.10.100a to B1010.100a
     """
-    return frag_id[0] + frag_id[2:4] + frag_id[5:]
+    parts = frag_id.split('.')
+    return '.'.join(["".join(parts[:-1]), parts[-1]])
 
 def reorder_dv_cols(df, dv_tag_meta, ordered_tags=("dmg","loc","dir","ds")):
     """
@@ -552,6 +554,12 @@ def story_mask(location, num_stories):
         mask = np.zeros(num_stories, dtype=bool)
         mask[-1] = True
         return mask
+    
+    # HP: temporary fix, have an alias for roof as top
+    if location == "top":
+        mask = np.zeros(num_stories, dtype=bool)
+        mask[-1] = True
+        return mask
 
     if "--" in location:
         start, end = map(int, location.split("--"))
@@ -577,7 +585,6 @@ def convert_pelicun(model_dir):
 
     with open(os.path.join(model_dir, 'input.json')) as file:
         pelicun_inputs = json.load(file)  
-        file.close()
 
     ############ Pull basic model info from Pelicun Inputs
     num_stories = int(pelicun_inputs['DL']['Asset']['NumberOfStories'])
@@ -724,7 +731,6 @@ def convert_pelicun(model_dir):
 
     ############### build comp_ds_list.csv
 
-    from re import search
     # Unique components + clean frag_id
     unique_frags = (
         comps["ID"]
@@ -746,7 +752,7 @@ def convert_pelicun(model_dir):
         #  regex match
         matches = ds_attributes[
             ds_attributes["fragility_id_regex"]
-            .apply(lambda pat: bool(pd.notna(pat) and search(pat, frag_id)))
+            .apply(lambda pat: bool(pd.notna(pat) and re.search(pat, frag_id)))
         ]
 
         if matches.empty:
@@ -797,11 +803,16 @@ def convert_pelicun(model_dir):
     comp_population = pd.DataFrame(index=multi_index)
 
     # build comp_population.csv
+
+    # restrict components to only those validated in comp_ds_list
+    comps['tmp_clean_id'] = comps['ID'].apply(clean_frag_id)
+    comps = comps[comps['tmp_clean_id'].isin(list(comp_ds_list['comp_id']))]
+    comps = comps.drop('tmp_clean_id', axis=1)
+
     for _, comp in comps.iterrows():
 
-        # remove first two periods 
-        temp_string = comp["ID"].replace(".", "", 1)
-        frag_id = temp_string.replace(".", "", 1)
+        # clean periods from ID, then replace with underscore to match convention
+        frag_id = clean_frag_id(comp['ID'])
         frag_id = frag_id.replace('.', '_')
 
         # initiate the frag_id column iff it doesn't exist
