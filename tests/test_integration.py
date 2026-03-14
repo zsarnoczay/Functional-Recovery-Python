@@ -1,3 +1,14 @@
+"""Integration tests comparing Python outputs against stored reference data.
+
+Dynamically discovers model fixtures under ``tests/fixtures/models/``, runs
+each model's analysis on the fly via ``run_analysis()``, and asserts that the
+results match the reference data within tolerance.
+
+In Phase 1, only high-level assertions are active.  AUC and pointwise assertions
+are gated behind ``ASSERT_AUC`` and ``ASSERT_POINTWISE`` flags for activation in
+Phase 2 when reference data will be Python-generated.
+"""
+
 import pytest
 from pathlib import Path
 
@@ -12,6 +23,12 @@ ASSERT_AUC = False
 ASSERT_POINTWISE = False
 
 def get_model_fixtures():
+    """Discover model fixture directories for pytest parametrization.
+
+    Each subdirectory of ``tests/fixtures/models/`` that contains a
+    ``reference/`` folder is treated as a test fixture.  Returns a sorted
+    list of ``(name, path)`` tuples.
+    """
     fixtures_dir = Path(__file__).parent / "fixtures" / "models"
     models = []
 
@@ -26,6 +43,7 @@ def get_model_fixtures():
 @pytest.mark.integration
 @pytest.mark.parametrize("model_name, model_dir", get_model_fixtures())
 def test_reference_comparison(model_name, model_dir, tmp_path):
+    """Run a model and assert its outputs match the stored reference data."""
     repo_root = Path(__file__).parent.parent
     example_dir = repo_root / "examples" / model_name
 
@@ -34,10 +52,7 @@ def test_reference_comparison(model_name, model_dir, tmp_path):
 
     reference_dir = model_dir / "reference"
 
-    # Run the Python implementation on the fly
     run_analysis(str(example_dir), str(tmp_path))
-
-    # Compare generated Python outputs against the reference fixtures
     results = evaluate_tolerances(str(reference_dir), str(tmp_path))
 
     hl = results["high_level"]

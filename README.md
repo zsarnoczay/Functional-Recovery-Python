@@ -145,3 +145,33 @@ The csv tables listed below contain default component, damage state, system, and
  - **tenant_function_requirements.csv**: Default tenant requirements for function for various occupancy classes.
  - **systems.csv**: Attributes of each default ssytem considered in the method.
  - **temp_repair_class.csv**: Attributes of each temprary repair class considered in the method.
+
+## Testing
+
+Install the package with test dependencies:
+
+```bash
+pip install -e ".[test]"
+```
+
+Run the integration tests, which compare Python outputs against stored reference data for each model in `tests/fixtures/models/`:
+
+```bash
+pytest tests/test_integration.py -v
+```
+
+Integration tests are marked with `@pytest.mark.integration` and can be filtered:
+
+```bash
+# Run only integration tests
+pytest -m integration
+
+# Skip integration tests
+pytest -m "not integration"
+```
+
+The comparison engine can also be used standalone for detailed inspection:
+
+```bash
+python tests/compare_runs.py <reference_dir> <python_output_dir>
+```

@@ -1,3 +1,19 @@
+"""Batch comparison engine for Functional Recovery Simulation outputs.
+
+Compares Python-generated recovery outputs against reference data using
+three tiers of statistical checks:
+
+1. High-level: mean recovery days within tolerance (reoccupancy, functional,
+   full repair).
+2. AUC: system-level area under recovery curve within tolerance.
+3. Pointwise: system-level curve error metrics (P95, MAE) within tolerance.
+
+Can be used as a library via ``evaluate_tolerances()`` or as a standalone
+CLI tool.
+
+The comparison methods are based on scripts originally developed by Ziyi Wang.
+"""
+
 import argparse
 import json
 import os
@@ -6,6 +22,26 @@ from pathlib import Path
 import numpy as np
 
 def load_runs(directory):
+    """Load recovery output JSONs from a directory.
+
+    Reads every ``*.json`` file, extracts building-level recovery days
+    (reoccupancy, functional, full repair) and system-level breakdown
+    curves.  Files that are malformed or missing required keys are
+    skipped with a warning.
+
+    Args:
+        directory: Path to a directory containing recovery output JSON
+            files (one per batch run).
+
+    Returns:
+        A list of dicts, one per successfully loaded run.  Each dict
+        contains scalar recovery-day lists (``reoc``, ``func``, ``full``)
+        and system breakdown arrays (``*_sys_names``, ``*_sys_bkdwns``,
+        ``*_targ_days``) for reoccupancy and functional recovery.
+
+    Raises:
+        NotADirectoryError: If *directory* does not exist.
+    """
     runs = []
     dir_path = Path(directory)
     if not dir_path.is_dir():
@@ -66,7 +102,22 @@ def load_runs(directory):
     return runs
 
 def get_high_level_stats(runs, key):
-    # Calculate stats per run
+    """Compute summary statistics for a recovery metric across batch runs.
+
+    For each run, calculates the mean and percentiles (p25, p50, p75) of
+    the per-realization recovery days, then averages those statistics
+    across all runs.
+
+    Args:
+        runs: List of run dicts as returned by ``load_runs()``.
+        key: Metric key to extract from each run (``'reoc'``, ``'func'``,
+            or ``'full'``).
+
+    Returns:
+        A dict with keys ``'mean'``, ``'p25'``, ``'p50'``, ``'p75'``
+        representing the run-averaged statistics.  Returns all zeros if
+        no valid data is found.
+    """
     means, p25s, p50s, p75s = [], [], [], []
     for r in runs:
         vals = r[key]
@@ -76,11 +127,10 @@ def get_high_level_stats(runs, key):
         p25s.append(np.percentile(vals, 25))
         p50s.append(np.percentile(vals, 50))
         p75s.append(np.percentile(vals, 75))
-        
+
     if not means:
         return {'mean': 0.0, 'p25': 0.0, 'p50': 0.0, 'p75': 0.0}
-        
-    # Average across runs
+
     return {
         'mean': np.mean(means),
         'p25': np.mean(p25s),
@@ -89,6 +139,28 @@ def get_high_level_stats(runs, key):
     }
 
 def standardize_to_grid(t, y, T_END=365.0, dt=1.0, extend="last"):
+    """Interpolate an irregular time-series onto a uniform daily grid.
+
+    Produces a regularly spaced representation of a recovery curve on
+    ``[0, T_END]`` with spacing *dt*.  Boundary handling: if the curve
+    does not start at t=0, a point is prepended assuming the initial
+    recovery fraction equals the first observed value.  If the curve
+    ends before *T_END*, the tail is filled according to *extend*.
+
+    Args:
+        t: 1-D array of time values (days).
+        y: 1-D array of corresponding recovery fractions.
+        T_END: End of the evaluation window in days.
+        dt: Grid spacing in days.
+        extend: How to fill beyond the last observed time —
+            ``'last'`` holds the final value, ``'zero'`` drops to 0.
+
+    Returns:
+        Tuple ``(t_grid, y_grid)`` of equal-length 1-D arrays.
+
+    Raises:
+        ValueError: If *t* is empty or *extend* is unrecognized.
+    """
     t = np.asarray(t, dtype=float)
     y = np.asarray(y, dtype=float)
 
@@ -96,6 +168,8 @@ def standardize_to_grid(t, y, T_END=365.0, dt=1.0, extend="last"):
 
     if t.size == 0:
         raise ValueError("Empty time array.")
+
+    # Assume recovery at t=0 equals the first observed value
     if t[0] > 0.0:
         t = np.insert(t, 0, 0.0)
         y = np.insert(y, 0, y[0])
@@ -113,13 +187,29 @@ def standardize_to_grid(t, y, T_END=365.0, dt=1.0, extend="last"):
     return t_grid, y_grid
 
 def get_system_curves(runs, sys_prefix):
+    """Extract and average system-level breakdown curves across batch runs.
+
+    For each system name found in the first run, collects the
+    corresponding breakdown curve from every run, standardizes each to a
+    daily grid, and averages them.
+
+    Args:
+        runs: List of run dicts as returned by ``load_runs()``.
+        sys_prefix: Key prefix — ``'reoc'`` for reoccupancy or ``'func'``
+            for functional recovery.
+
+    Returns:
+        Tuple ``(t_grid, avg_curves)`` where *t_grid* is the daily time
+        grid and *avg_curves* is a list of dicts, each with ``'name'``
+        (system name) and ``'curve'`` (averaged 1-D array).
+    """
     t_grid = np.arange(0.0, 365.0 + 1.0, 1.0)
-    
+
     if not runs:
         return t_grid, []
-        
+
     systems = runs[0][f'{sys_prefix}_sys_names']
-    
+
     avg_curves = []
     for sys_name in systems:
         curves = []
@@ -128,22 +218,42 @@ def get_system_curves(runs, sys_prefix):
             try:
                 run_idx = run_sys_names.index(sys_name)
             except ValueError:
-                continue 
-            
+                # System not present in this run; average over remaining runs
+                continue
+
             t = r[f'{sys_prefix}_targ_days']
             y = r[f'{sys_prefix}_sys_bkdwns'][run_idx]
             _, y_grid = standardize_to_grid(t, y, T_END=365, dt=1.0)
             curves.append(y_grid)
-            
+
         if curves:
             avg_curves.append({
                 'name': sys_name,
                 'curve': np.mean(curves, axis=0)
             })
-            
+
     return t_grid, avg_curves
 
 def auc_to_1yr(y, t, T_END=365):
+    """Compute the area under a recovery curve from 0 to *T_END* days.
+
+    Handles three boundary cases before integrating:
+
+    * If the curve starts after t=0, prepend a point at t=0 using the
+      first observed value.
+    * If the curve ends before *T_END*, extend it by holding the last
+      value.
+    * If the curve extends beyond *T_END*, truncate and interpolate at
+      *T_END*.
+
+    Args:
+        y: 1-D array of recovery fractions.
+        t: 1-D array of corresponding time values (days).
+        T_END: Upper integration bound in days.
+
+    Returns:
+        Area under the curve as a float (units: fraction-days).
+    """
     y = np.asarray(y, dtype=float)
     t = np.asarray(t, dtype=float)
 
@@ -166,6 +276,21 @@ def auc_to_1yr(y, t, T_END=365):
     return float(np.trapezoid(y, t))
 
 def curve_diff_metrics(y_py, y_ref, t_grid):
+    """Compute pointwise error metrics between two recovery curves.
+
+    All error values are in the same units as the input curves
+    (recovery fraction, 0-1 scale).
+
+    Args:
+        y_py: 1-D array of Python-generated recovery fractions.
+        y_ref: 1-D array of reference recovery fractions (same length).
+        t_grid: 1-D array of corresponding time values (days).
+
+    Returns:
+        A dict with keys ``'MAE'``, ``'RMSE'``, ``'P50_abs'``,
+        ``'P95_abs'``, ``'P99_abs'``, ``'Max_abs'``, and ``'t_at_max'``
+        (day at which the maximum absolute error occurs).
+    """
     d = np.abs(y_py - y_ref)
 
     mae = float(np.mean(d))
@@ -189,6 +314,29 @@ def curve_diff_metrics(y_py, y_ref, t_grid):
     }
 
 def evaluate_tolerances(reference_dir, python_dir):
+    """Run the three-tier comparison and return a results dict.
+
+    Loads runs from both directories, computes high-level, AUC, and
+    pointwise metrics for reoccupancy, functional, and full-repair
+    recovery, and applies pass/fail tolerance checks to each.
+
+    Args:
+        reference_dir: Path to directory containing reference output
+            JSON files.
+        python_dir: Path to directory containing Python output JSON
+            files.
+
+    Returns:
+        A dict with four top-level keys:
+
+        * ``'high_level'``: per-metric stats and pass/fail.
+        * ``'auc'``: per-system AUC comparison and pass/fail.
+        * ``'pointwise'``: per-system curve error metrics and pass/fail.
+        * ``'all_passed'``: ``True`` only if every check passed.
+
+    Raises:
+        ValueError: If either directory contains no valid JSON runs.
+    """
     ref_runs = load_runs(reference_dir)
     py_runs = load_runs(python_dir)
 
@@ -214,6 +362,7 @@ def evaluate_tolerances(reference_dir, python_dir):
         else:
             diff = float('nan')
 
+        # Tolerance: mean recovery days within 3% of reference
         passed = diff <= 3.0 or (np.isnan(diff) and py_stats['mean'] == 0)
         if not passed: results["all_passed"] = False
 
@@ -257,6 +406,7 @@ def evaluate_tolerances(reference_dir, python_dir):
             else:
                 pct_diff = float('nan')
 
+            # Tolerance: system AUC within 1% of reference
             passed = pct_diff <= 1.0 or (np.isnan(pct_diff) and auc_py == 0)
             if not passed: results["all_passed"] = False
 
@@ -294,6 +444,7 @@ def evaluate_tolerances(reference_dir, python_dir):
                 continue
             
             metrics = curve_diff_metrics(pc['curve'], rc['curve'], t_grid)
+            # Tolerance: P95 absolute error ≤ 4% and MAE ≤ 2% (fraction scale)
             passed = metrics['P95_abs'] <= 0.04 and metrics['MAE'] <= 0.02
             if not passed: results["all_passed"] = False
             
@@ -313,6 +464,13 @@ def evaluate_tolerances(reference_dir, python_dir):
     return results
 
 def print_results(results, reference_dir, python_dir):
+    """Pretty-print the three comparison tables to stdout.
+
+    Args:
+        results: Results dict as returned by ``evaluate_tolerances()``.
+        reference_dir: Path shown in the header for the reference data.
+        python_dir: Path shown in the header for the Python data.
+    """
     print(f"Loading reference runs from {reference_dir}...")
     print(f"Loading Python runs from {python_dir}...\n")
 
@@ -365,6 +523,7 @@ def print_results(results, reference_dir, python_dir):
         print("\nResult: PASS. All comparisons meet the tolerance criteria.")
 
 def main():
+    """CLI entry point: compare two directories and print results."""
     parser = argparse.ArgumentParser(description="Batch comparison of Python vs reference Functional Recovery runs.")
     parser.add_argument('reference_dir', type=str, help='Directory containing reference output JSON runs')
     parser.add_argument('python_dir', type=str, help='Directory containing Python output JSON runs')
