@@ -1,59 +1,73 @@
 import pytest
-import shutil
 from pathlib import Path
 
-# Adjust imports since compare_runs is in tests/
 from compare_runs import evaluate_tolerances
 from atc138.driver import run_analysis
 
-# Discover fixtures dynamically
+# Phase 1: Only high-level assertions are active.
+# Enable these in Phase 2 when reference data is Python-generated
+# and tighter tolerances are appropriate. Note that tolerances will also need
+# to be adjusted in compare_runs.py for Phase 2.
+ASSERT_AUC = False
+ASSERT_POINTWISE = False
+
 def get_model_fixtures():
-    fixtures_dir = Path(__file__).parent / "fixtures" / "matlab_comparison"
+    fixtures_dir = Path(__file__).parent / "fixtures" / "models"
     models = []
-    
+
     if not fixtures_dir.exists():
         return models
-        
+
     for model_dir in fixtures_dir.iterdir():
         if model_dir.is_dir() and model_dir.name != "__pycache__":
             models.append((model_dir.name, model_dir))
-    return models
+    return sorted(models, key=lambda x: x[0])
 
+@pytest.mark.integration
 @pytest.mark.parametrize("model_name, model_dir", get_model_fixtures())
-def test_matlab_python_comparison(model_name, model_dir, tmp_path):
-    # Ensure corresponding example directory exists
+def test_reference_comparison(model_name, model_dir, tmp_path):
     repo_root = Path(__file__).parent.parent
     example_dir = repo_root / "examples" / model_name
-    
+
     if not example_dir.is_dir():
         raise FileNotFoundError(f"Example directory for {model_name} not found at {example_dir}")
-        
-    matlab_dir = model_dir / "output_MATLAB"
-    
+
+    reference_dir = model_dir / "reference"
+
     # Run the Python implementation on the fly
     run_analysis(str(example_dir), str(tmp_path))
-    
-    # Compare generated Python outputs against the MATLAB fixtures
-    results = evaluate_tolerances(str(matlab_dir), str(tmp_path))
-        
+
+    # Compare generated Python outputs against the reference fixtures
+    results = evaluate_tolerances(str(reference_dir), str(tmp_path))
+
     hl = results["high_level"]
-    
-    # High-level tests
+
+    # High-level assertions
     for metric_key, label in [("reoc", "Reoccupancy"), ("func", "Functional"), ("full", "Full repair")]:
         if metric_key in hl:
             m = hl[metric_key]
             assert m["pass"], (
                 f"High-level metric '{label}' failed tolerance check for {model_name}. "
-                f"Py Mean: {m['mean']:.1f}, Mat Mean: {m['mat_mean']:.1f}, Diff: {m['pct_diff']:.3f}%"
+                f"Py Mean: {m['mean']:.1f}, Ref Mean: {m['ref_mean']:.1f}, Diff: {m['pct_diff']:.3f}%"
             )
 
-    # TODO: Add assertions for Pointwise metrics here using results["pointwise"] 
-    #       when specified by user
-    
-    # TODO: Add assertions for AUC metrics here using results["auc"]
-    #       when specified by user
-    
-    # E.g.
-    # for metric in results["pointwise"]["reoc"]:
-    #     assert metric["pass"], f"Pointwise metric failed for Reoccupancy, System: {metric['system']}"
-    
+    # AUC assertions (gated for Phase 2)
+    if ASSERT_AUC:
+        for tag_key, label in [("reoc", "Reoccupancy"), ("func", "Functional")]:
+            for item in results["auc"][tag_key]:
+                assert item["pass"], (
+                    f"AUC metric failed for {label}, System: {item['system']} "
+                    f"in {model_name}. "
+                    f"Py AUC: {item['auc_py']:.3f}, Ref AUC: {item['auc_ref']:.3f}, "
+                    f"Diff: {item['pct_diff']:.4f}%"
+                )
+
+    # Pointwise assertions (gated for Phase 2)
+    if ASSERT_POINTWISE:
+        for tag_key, label in [("reoc", "Reoccupancy"), ("func", "Functional")]:
+            for item in results["pointwise"][tag_key]:
+                assert item["pass"], (
+                    f"Pointwise metric failed for {label}, System: {item['system']} "
+                    f"in {model_name}. "
+                    f"MAE: {item['MAE']:.4f}, P95: {item['P95_abs']:.4f}"
+                )

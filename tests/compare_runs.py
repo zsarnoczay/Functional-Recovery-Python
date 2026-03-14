@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import warnings
 from pathlib import Path
 import numpy as np
 
@@ -15,7 +16,7 @@ def load_runs(directory):
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         except Exception as e:
-            print(f"Warning: Failed to load {file_path.name}: {e}")
+            warnings.warn(f"Failed to load {file_path.name}: {e}")
             continue
             
         # Handle nesting based on reference script
@@ -24,7 +25,7 @@ def load_runs(directory):
             data = data['functionality']
             
         if 'recovery' not in data:
-            print(f"Warning: Skipping {file_path.name} - missing 'recovery' key.")
+            warnings.warn(f"Skipping {file_path.name} - missing 'recovery' key.")
             continue
             
         try:
@@ -45,7 +46,7 @@ def load_runs(directory):
                 'func_targ_days': data['recovery']['functional']['breakdowns']['perform_targ_days'],
             }
         except KeyError as e:
-            print(f"Warning: Skipping {file_path.name} - malformed data structure missing {e}")
+            warnings.warn(f"Skipping {file_path.name} - malformed data structure missing {e}")
             continue
             
         try:
@@ -57,7 +58,7 @@ def load_runs(directory):
                 full_rec = per_story
             run_dict['full'] = full_rec.tolist()
         except KeyError:
-            print(f"Warning: {file_path.name} missing 'building_repair_schedule.full.repair_complete_day.per_story'.")
+            warnings.warn(f"{file_path.name} missing 'building_repair_schedule.full.repair_complete_day.per_story'.")
             run_dict['full'] = []
             
         runs.append(run_dict)
@@ -164,8 +165,8 @@ def auc_to_1yr(y, t, T_END=365):
 
     return float(np.trapezoid(y, t))
 
-def curve_diff_metrics(y_py, y_mat, t_grid):
-    d = np.abs(y_py - y_mat)
+def curve_diff_metrics(y_py, y_ref, t_grid):
+    d = np.abs(y_py - y_ref)
 
     mae = float(np.mean(d))
     rmse = float(np.sqrt(np.mean(d**2)))
@@ -187,11 +188,11 @@ def curve_diff_metrics(y_py, y_mat, t_grid):
         "t_at_max": t_at_max,
     }
 
-def evaluate_tolerances(matlab_dir, python_dir):
-    mat_runs = load_runs(matlab_dir)
+def evaluate_tolerances(reference_dir, python_dir):
+    ref_runs = load_runs(reference_dir)
     py_runs = load_runs(python_dir)
-    
-    if not mat_runs or not py_runs:
+
+    if not ref_runs or not py_runs:
         raise ValueError("Missing valid JSON runs for comparison in one or both directories.")
         
     results = {
@@ -206,63 +207,63 @@ def evaluate_tolerances(matlab_dir, python_dir):
     
     for metric in hl_metrics:
         py_stats = get_high_level_stats(py_runs, metric)
-        mat_stats = get_high_level_stats(mat_runs, metric)
-        
-        if mat_stats['mean'] != 0:
-            diff = 100.0 * abs(py_stats['mean'] - mat_stats['mean']) / mat_stats['mean']
+        ref_stats = get_high_level_stats(ref_runs, metric)
+
+        if ref_stats['mean'] != 0:
+            diff = 100.0 * abs(py_stats['mean'] - ref_stats['mean']) / ref_stats['mean']
         else:
             diff = float('nan')
-            
+
         passed = diff <= 3.0 or (np.isnan(diff) and py_stats['mean'] == 0)
         if not passed: results["all_passed"] = False
-        
+
         results["high_level"][metric] = {
             "mean": py_stats["mean"],
             "p25": py_stats["p25"],
             "p50": py_stats["p50"],
             "p75": py_stats["p75"],
-            "mat_mean": mat_stats["mean"],
-            "mat_p25": mat_stats["p25"],
-            "mat_p50": mat_stats["p50"],
-            "mat_p75": mat_stats["p75"],
+            "ref_mean": ref_stats["mean"],
+            "ref_p25": ref_stats["p25"],
+            "ref_p50": ref_stats["p50"],
+            "ref_p75": ref_stats["p75"],
             "pct_diff": diff,
             "pass": passed
         }
 
     # --- 2. System Level AUC Metrics ---
     for tag_key, prefix in [('reoc', 'reoc'), ('func', 'func')]:
-        t_grid, mat_curves = get_system_curves(mat_runs, prefix)
+        t_grid, ref_curves = get_system_curves(ref_runs, prefix)
         _, py_curves = get_system_curves(py_runs, prefix)
-        
-        for mc in mat_curves:
-            sys_name = mc['name']
+
+        for rc in ref_curves:
+            sys_name = rc['name']
             pc = next((c for c in py_curves if c['name'] == sys_name), None)
             if not pc:
                 results["auc"][tag_key].append({
                     "system": sys_name,
                     "auc_py": float('nan'),
-                    "auc_mat": auc_to_1yr(mc['curve'], t_grid),
+                    "auc_ref": auc_to_1yr(rc['curve'], t_grid),
                     "pct_diff": float('nan'),
                     "pass": False,
                     "missing": True
                 })
                 results["all_passed"] = False
                 continue
-                
-            auc_mat = auc_to_1yr(mc['curve'], t_grid)
+
+            auc_ref = auc_to_1yr(rc['curve'], t_grid)
             auc_py = auc_to_1yr(pc['curve'], t_grid)
-            if auc_mat != 0:
-                pct_diff = 100 * abs(auc_py - auc_mat) / auc_mat
+            if auc_ref != 0:
+                pct_diff = 100 * abs(auc_py - auc_ref) / auc_ref
             else:
                 pct_diff = float('nan')
-                
+
             passed = pct_diff <= 1.0 or (np.isnan(pct_diff) and auc_py == 0)
             if not passed: results["all_passed"] = False
-            
+
             results["auc"][tag_key].append({
                 "system": sys_name,
                 "auc_py": auc_py,
-                "auc_mat": auc_mat,
+                "auc_ref": auc_ref,
                 "pct_diff": pct_diff,
                 "pass": passed,
                 "missing": False
@@ -270,11 +271,11 @@ def evaluate_tolerances(matlab_dir, python_dir):
 
     # --- 3. System Level Pointwise Metrics ---
     for tag_key, prefix in [('reoc', 'reoc'), ('func', 'func')]:
-        t_grid, mat_curves = get_system_curves(mat_runs, prefix)
+        t_grid, ref_curves = get_system_curves(ref_runs, prefix)
         _, py_curves = get_system_curves(py_runs, prefix)
-        
-        for mc in mat_curves:
-            sys_name = mc['name']
+
+        for rc in ref_curves:
+            sys_name = rc['name']
             pc = next((c for c in py_curves if c['name'] == sys_name), None)
             if not pc:
                 results["pointwise"][tag_key].append({
@@ -292,7 +293,7 @@ def evaluate_tolerances(matlab_dir, python_dir):
                 results["all_passed"] = False
                 continue
             
-            metrics = curve_diff_metrics(pc['curve'], mc['curve'], t_grid)
+            metrics = curve_diff_metrics(pc['curve'], rc['curve'], t_grid)
             passed = metrics['P95_abs'] <= 0.04 and metrics['MAE'] <= 0.02
             if not passed: results["all_passed"] = False
             
@@ -311,36 +312,36 @@ def evaluate_tolerances(matlab_dir, python_dir):
 
     return results
 
-def print_results(results, matlab_dir, python_dir):
-    print(f"Loading MATLAB runs from {matlab_dir}...")
+def print_results(results, reference_dir, python_dir):
+    print(f"Loading reference runs from {reference_dir}...")
     print(f"Loading Python runs from {python_dir}...\n")
-    
+
     # --- 1. High-level Metrics ---
     print('===== High-level recovery statistics (days) =====')
     print('Metric           | Code   | mean  | p25   | median | p75   | % diff (mean) | Pass?')
     print('-----------------|--------|-------|-------|--------|-------|---------------|------')
-    
+
     labels = {'reoc': 'Reoccupancy', 'func': 'Functional', 'full': 'Full repair'}
     for metric, label in labels.items():
         if metric not in results["high_level"]:
             continue
         r = results["high_level"][metric]
         print(f"{label:<16} | Py    | {r['mean']:5.1f} | {r['p25']:5.1f} | {r['p50']:6.1f} | {r['p75']:5.1f} |               |")
-        print(f"{'':<16} | Mat   | {r['mat_mean']:5.1f} | {r['mat_p25']:5.1f} | {r['mat_p50']:6.1f} | {r['mat_p75']:5.1f} | {r['pct_diff']:7.3f}%     | {'PASS' if r['pass'] else 'FAIL'}")
+        print(f"{'':<16} | Ref   | {r['ref_mean']:5.1f} | {r['ref_p25']:5.1f} | {r['ref_p50']:6.1f} | {r['ref_p75']:5.1f} | {r['pct_diff']:7.3f}%     | {'PASS' if r['pass'] else 'FAIL'}")
     print('=================================================\n')
 
     # --- 2. System Level AUC Metrics ---
     print('===== System-level AUC comparison (0-365 days) =====')
-    print('Tag         | System                | AUC Py   | AUC Mat | % diff     | Pass?')
+    print('Tag         | System                | AUC Py   | AUC Ref | % diff     | Pass?')
     print('------------|-----------------------|----------|---------|------------|------')
     labels = {'reoc': 'Reoccupancy', 'func': 'Functional'}
     for tag_key, label in labels.items():
         for item in results["auc"][tag_key]:
             if item.get("missing"):
-                print(f"{label:<11} | {item['system']:<21} | MISSING  | {item['auc_mat']:7.3f} | N/A        | FAIL")
+                print(f"{label:<11} | {item['system']:<21} | MISSING  | {item['auc_ref']:7.3f} | N/A        | FAIL")
             else:
                 diff_str = f"{item['pct_diff']:8.4f}%" if not np.isnan(item['pct_diff']) else "     NaN"
-                print(f"{label:<11} | {item['system']:<21} | {item['auc_py']:8.3f} | {item['auc_mat']:7.3f} | {diff_str:>10} | {'PASS' if item['pass'] else 'FAIL'}")
+                print(f"{label:<11} | {item['system']:<21} | {item['auc_py']:8.3f} | {item['auc_ref']:7.3f} | {diff_str:>10} | {'PASS' if item['pass'] else 'FAIL'}")
     print('====================================================\n')
 
     # --- 3. System Level Pointwise Metrics ---
@@ -364,14 +365,14 @@ def print_results(results, matlab_dir, python_dir):
         print("\nResult: PASS. All comparisons meet the tolerance criteria.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Batch comparison of Python vs MATLAB Functional Recovery runs.")
-    parser.add_argument('matlab_dir', type=str, help='Directory containing MATLAB output JSON runs')
+    parser = argparse.ArgumentParser(description="Batch comparison of Python vs reference Functional Recovery runs.")
+    parser.add_argument('reference_dir', type=str, help='Directory containing reference output JSON runs')
     parser.add_argument('python_dir', type=str, help='Directory containing Python output JSON runs')
     args = parser.parse_args()
-    
+
     try:
-        results = evaluate_tolerances(args.matlab_dir, args.python_dir)
-        print_results(results, args.matlab_dir, args.python_dir)
+        results = evaluate_tolerances(args.reference_dir, args.python_dir)
+        print_results(results, args.reference_dir, args.python_dir)
         
         if not results.get("all_passed", False):
             raise ValueError("One or more assertions did not meet the tolerance criteria.")
