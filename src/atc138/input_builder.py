@@ -595,6 +595,10 @@ def story_mask(location, num_stories):
         start, end = map(int, location.split("--"))
         return (stories >= start) & (stories <= end)
 
+    if ',' in location:
+        loc_vec = np.array(location.split(','), dtype=int)
+        return np.isin(stories, loc_vec)
+
     loc_vec = np.array(location.split(), dtype=int)
     return np.isin(stories, loc_vec)
 
