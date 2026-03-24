@@ -742,6 +742,31 @@ def convert_pelicun(model_dir):
     else:
         eng_cost_ratio = general_inputs['engineering_cost_ratio']
 
+    # Convert Pelicun worker-days to calendar days for replacement time.
+    # Use the same max-workers formula as the repair scheduler, but
+    # cap the effective area at a limited number of parallel floors to consider
+    # that construction proceeds upward — a 40-story building will not have all
+    # floors staffed simultaneously.
+    _MAX_PARALLEL_FLOORS = 6
+    _default_rto = json.load(
+        open(os.path.join(static_data_dir, 'default_inputs.json'))
+    )['repair_time_options']
+    _wkr_per_sf = _default_rto['max_workers_per_sqft_building']
+    _wkr_min = _default_rto['max_workers_building_min']
+    _wkr_max = _default_rto['max_workers_building_max']
+
+    _effective_floors = min(num_stories, _MAX_PARALLEL_FLOORS)
+    _effective_area = _effective_floors * plan_area
+    _max_workers = min(
+        max(int(_effective_area * _wkr_per_sf + 10), _wkr_min),
+        _wkr_max,
+    )
+    _replacement_time_days = np.where(
+        replacement_mask,
+        DV_summary["repair_time-parallel"] / _max_workers,
+        np.nan,
+    )
+
     damage_consequences = dict(
         repair_cost_ratio_total=(
             DV_summary["repair_cost-"] / total_cost
@@ -749,11 +774,7 @@ def convert_pelicun(model_dir):
         repair_cost_ratio_engineering=(
             DV_summary["repair_cost-"] / total_cost * eng_cost_ratio
         ).tolist(),
-        simulated_replacement_time=np.where(
-            replacement_mask,
-            DV_summary["repair_time-parallel"],
-            np.nan,
-        ).tolist(),
+        simulated_replacement_time=_replacement_time_days.tolist(),
     )
 
     save_json(
